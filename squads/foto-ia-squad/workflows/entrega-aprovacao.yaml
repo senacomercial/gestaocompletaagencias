@@ -1,0 +1,63 @@
+id: entrega-aprovacao
+name: Entrega e Aprovação FotoIA
+description: Workflow de envio da galeria, aprovação e entrega final
+version: 1.0.0
+
+trigger:
+  event: imagens_geradas
+  condition: status == "EM_PRODUCAO"
+
+steps:
+  - id: step_1_enviar_galeria
+    task: enviar-para-aprovacao
+    agent: entregador-ia
+    input:
+      pedidoId: "{{pedido.id}}"
+      imagensIds: "{{imagens.ids}}"
+      leadTelefone: "{{lead.telefone}}"
+      leadNome: "{{lead.nome}}"
+      rodada: "{{pedido.rodadasRevisao}}"
+    on_success:
+      next: step_2_aguardar_aprovacao
+
+  - id: step_2_aguardar_aprovacao
+    type: wait_for_event
+    event: resposta_cliente
+    timeout_hours: 72
+    on_event:
+      condition:
+        - key: tipo_resposta
+          value: aprovado
+          next: step_3_entregar
+        - key: tipo_resposta
+          value: revisao
+          next: step_revisao_loop
+    on_timeout:
+      action: reenviar_galeria
+      retry: 1
+      on_retry_timeout:
+        action: notificar_gestor
+
+  - id: step_revisao_loop
+    type: handoff
+    workflow: producao-imagens
+    step: step_revisao
+    input:
+      feedbackRevisao: "{{cliente.mensagem}}"
+
+  - id: step_3_entregar
+    task: entregar-servico
+    agent: entregador-ia
+    input:
+      pedidoId: "{{pedido.id}}"
+      leadNome: "{{lead.nome}}"
+      leadTelefone: "{{lead.telefone}}"
+    on_success:
+      action: marcar_como_entregue
+      action_2: mover_lead_para_cliente
+
+outputs:
+  - linkGaleria
+  - aprovado
+  - linkDownload
+  - status_final

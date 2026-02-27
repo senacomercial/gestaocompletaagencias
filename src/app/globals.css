@@ -1,0 +1,167 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* shadcn/ui CSS variables — dark theme como padrão */
+    --background: 0 0% 4%;
+    --foreground: 45 60% 92%;
+
+    --card: 0 0% 7%;
+    --card-foreground: 45 60% 92%;
+
+    --popover: 0 0% 7%;
+    --popover-foreground: 45 60% 92%;
+
+    --primary: 45 62% 52%;        /* Agency Gold #D4AF37 */
+    --primary-foreground: 0 0% 4%;
+
+    --secondary: 30 40% 40%;      /* Bronze #CD7F32 */
+    --secondary-foreground: 45 60% 92%;
+
+    --muted: 0 0% 13%;
+    --muted-foreground: 0 0% 55%;
+
+    --accent: 0 0% 13%;
+    --accent-foreground: 45 60% 92%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
+    --ring: 45 62% 52%;
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-surface-3;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  /* Seleção de texto com cor da marca */
+  ::selection {
+    background-color: rgba(212, 175, 55, 0.2);
+    color: #f5cc50;
+  }
+
+  /* Focus visible global — anel dourado sutil */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.4);
+    border-radius: var(--radius);
+  }
+
+  /* Scrollbar customizada — minimalista */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #2A2A2A;
+    border-radius: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(212, 175, 55, 0.3);
+  }
+}
+
+@layer components {
+  /* Card padrão da aplicação */
+  .card-agency {
+    @apply bg-surface-1 border border-surface-3 rounded-lg;
+  }
+
+  /* Gradiente de texto dourado */
+  .text-gold-gradient {
+    @apply bg-gradient-to-r from-gold-400 to-bronze-400 bg-clip-text text-transparent;
+  }
+
+  /* Badge de status genérico */
+  .badge-status {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  /* Input padrão da aplicação */
+  .input-agency {
+    @apply bg-surface-2 border border-surface-3 text-foreground
+           placeholder:text-muted-foreground
+           focus:border-gold-400/50 focus:ring-1 focus:ring-gold-400/20 focus:outline-none
+           rounded-lg px-3 py-2.5 text-sm w-full transition-all duration-150;
+  }
+
+  /* Botão primário dourado */
+  .btn-gold {
+    @apply bg-gradient-to-r from-gold-400 to-bronze-400 text-surface-base font-semibold
+           hover:opacity-90 active:scale-[0.98]
+           rounded-lg px-4 py-2 text-sm transition-all duration-150;
+  }
+
+  /* Label de seção */
+  .section-label {
+    @apply text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50;
+  }
+}
+
+@layer utilities {
+  /* Shimmer para loading states */
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      #1A1A1A 25%,
+      #222222 50%,
+      #1A1A1A 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite linear;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.25s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.25s ease-out;
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.15s ease-out;
+  }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1);    }
+}

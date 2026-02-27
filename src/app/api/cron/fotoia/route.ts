@@ -1,0 +1,107 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { StatusPedidoFoto } from '@prisma/client'
+import { executarFollowUp } from '@/lib/fotoia/agents/vendedor'
+import { gerarImagens } from '@/lib/fotoia/agents/produtor'
+import { subHours } from 'date-fns'
+
+// GET /api/cron/fotoia — executado a cada hora via Vercel Cron
+// Autorização: CRON_SECRET header
+export async function GET(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET
+  if (cronSecret) {
+    const authHeader = req.headers.get('authorization')
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+  }
+
+  const agora = new Date()
+  const resultados: Record<string, number> = {
+    followup1: 0,
+    followup2: 0,
+    perdidos: 0,
+    queueProcessados: 0,
+  }
+
+  // 1. Follow-up 1: PROPOSTA_ENVIADA há > 24h
+  const config24h = await prisma.pedidoFotoIA.findMany({
+    where: {
+      status: StatusPedidoFoto.PROPOSTA_ENVIADA,
+      criadoEm: { lt: subHours(agora, 24) },
+    },
+    select: { id: true },
+  })
+  for (const pedido of config24h) {
+    try {
+      await executarFollowUp(pedido.id, 1)
+      resultados.followup1++
+    } catch (e) {
+      console.error(`[Cron] FollowUp1 error for ${pedido.id}:`, e)
+    }
+  }
+
+  // 2. Follow-up 2: FOLLOWUP_1 há > 48h (total desde criação)
+  const config48h = await prisma.pedidoFotoIA.findMany({
+    where: {
+      status: StatusPedidoFoto.FOLLOWUP_1,
+      criadoEm: { lt: subHours(agora, 48) },
+    },
+    select: { id: true },
+  })
+  for (const pedido of config48h) {
+    try {
+      await executarFollowUp(pedido.id, 2)
+      resultados.followup2++
+    } catch (e) {
+      console.error(`[Cron] FollowUp2 error for ${pedido.id}:`, e)
+    }
+  }
+
+  // 3. Marcar PERDIDO: FOLLOWUP_2 ou AGUARDANDO_PAGAMENTO há > 72h
+  const perdidosLead = await prisma.pedidoFotoIA.findMany({
+    where: {
+      status: { in: [StatusPedidoFoto.FOLLOWUP_2, StatusPedidoFoto.AGUARDANDO_PAGAMENTO] },
+      criadoEm: { lt: subHours(agora, 72) },
+    },
+    select: { id: true },
+  })
+  if (perdidosLead.length > 0) {
+    await prisma.pedidoFotoIA.updateMany({
+      where: { id: { in: perdidosLead.map(p => p.id) } },
+      data: { status: StatusPedidoFoto.PERDIDO },
+    })
+    resultados.perdidos = perdidosLead.length
+  }
+
+  // 4. Processar queue de geração pendente
+  const queuePendente = await prisma.geracaoQueue.findMany({
+    where: { processado: false },
+    orderBy: [{ prioridade: 'desc' }, { criadoEm: 'asc' }],
+    take: 5,
+    include: { pedido: { select: { organizacaoId: true, status: true } } },
+  })
+
+  for (const item of queuePendente) {
+    if (item.pedido.status !== StatusPedidoFoto.PAGAMENTO_CONFIRMADO) {
+      await prisma.geracaoQueue.delete({ where: { id: item.id } })
+      continue
+    }
+    try {
+      await gerarImagens(item.pedidoId)
+      await prisma.geracaoQueue.update({
+        where: { id: item.id },
+        data: { processado: true },
+      })
+      resultados.queueProcessados++
+    } catch (e) {
+      console.error(`[Cron] Queue error for ${item.pedidoId}:`, e)
+      await prisma.geracaoQueue.update({
+        where: { id: item.id },
+        data: { tentativas: { increment: 1 } },
+      })
+    }
+  }
+
+  return NextResponse.json({ ok: true, agora: agora.toISOString(), ...resultados })
+}

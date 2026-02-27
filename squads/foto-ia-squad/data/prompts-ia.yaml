@@ -1,0 +1,91 @@
+# Prompts de IA por Tipo de Foto
+# Editável via /foto-ia/configuracoes no painel admin
+# Modelo padrão: Replicate (SDXL ou Flux)
+
+prompts:
+  RETRATO_PROFISSIONAL:
+    modelo: "stability-ai/sdxl"
+    prompt: >
+      Professional corporate portrait photo of a person,
+      studio lighting with soft shadows, sharp focus on face,
+      blurred bokeh background, business formal attire,
+      neutral grey or white background, 8K ultra-realistic,
+      LinkedIn profile photo style, high-end photography
+    negative_prompt: >
+      cartoon, anime, illustration, painting, blurry, watermark,
+      text, distorted, ugly, deformed, low quality, nsfw,
+      sunglasses, hat, outdoor, casual clothing
+    width: 1024
+    height: 1024
+    num_inference_steps: 50
+    guidance_scale: 7.5
+
+  FOTO_PRODUTO:
+    modelo: "stability-ai/sdxl"
+    prompt: >
+      Professional product photography on clean white background,
+      studio lighting with soft box lights, sharp focus,
+      commercial photography style, e-commerce product shot,
+      high resolution, detailed texture, professional advertisement
+    negative_prompt: >
+      blurry, dark, cluttered background, watermark, text,
+      low quality, distorted, shadow artifacts, overexposed
+    width: 1024
+    height: 1024
+    num_inference_steps: 50
+    guidance_scale: 7.5
+
+  FOTO_CORPORATIVA:
+    modelo: "stability-ai/sdxl"
+    prompt: >
+      Corporate business team photo in modern office environment,
+      professional attire, natural lighting, clean and modern aesthetic,
+      real photography style, high resolution, sharp focus,
+      authentic business environment
+    negative_prompt: >
+      cartoon, blurry, watermark, text, distorted, unprofessional,
+      casual clothing, messy environment, low quality
+    width: 1344
+    height: 768
+    num_inference_steps: 50
+    guidance_scale: 7.5
+
+  BANNER_REDES_SOCIAIS:
+    modelo: "stability-ai/sdxl"
+    prompt: >
+      Modern social media banner design, professional and creative,
+      vibrant colors, clean typography space, high resolution,
+      marketing design, contemporary aesthetic,
+      suitable for Instagram/Facebook/LinkedIn
+    negative_prompt: >
+      blurry, amateur, cluttered, watermark, low quality,
+      distorted, old-fashioned, boring
+    width: 1344
+    height: 768
+    num_inference_steps: 40
+    guidance_scale: 7.0
+
+  FOTO_PERFIL:
+    modelo: "stability-ai/sdxl"
+    prompt: >
+      Professional profile photo, headshot portrait,
+      clean background, flattering lighting, sharp focus on face,
+      friendly and approachable expression, high resolution,
+      suitable for professional social networks
+    negative_prompt: >
+      full body, multiple people, cartoon, blurry, watermark,
+      extreme expressions, casual, low quality, distorted
+    width: 1024
+    height: 1024
+    num_inference_steps: 50
+    guidance_scale: 7.5
+
+  CUSTOM:
+    modelo: "stability-ai/sdxl"
+    prompt: "{{promptPersonalizado}}"  # preenchido pelo gestor no briefing
+    negative_prompt: >
+      blurry, watermark, text, low quality, distorted, nsfw
+    width: 1024
+    height: 1024
+    num_inference_steps: 50
+    guidance_scale: 7.5

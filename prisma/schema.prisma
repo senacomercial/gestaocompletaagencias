@@ -1,0 +1,677 @@
+// =============================================================================
+// Prisma Schema — Sistema de Gestão Completa de Agências
+// =============================================================================
+// Gerado por: Aria (@architect) | 2026-02-22
+// Multi-tenant: todos os models têm organizacaoId
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum Role {
+  ADMIN
+  GESTOR
+  OPERACIONAL
+}
+
+enum LeadStatus {
+  ATIVO
+  VENDA_REALIZADA
+  PERDIDO
+}
+
+enum TipoPagamento {
+  RECORRENTE
+  PARCELADO
+  AVULSO
+}
+
+enum StatusLancamento {
+  PENDENTE
+  PAGO
+  ATRASADO
+  CANCELADO
+}
+
+enum TipoLancamento {
+  RECORRENTE
+  UNICO
+}
+
+enum StatusProjeto {
+  ATIVO
+  PAUSADO
+  CONCLUIDO
+  CANCELADO
+}
+
+enum StatusTarefa {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDA
+  BLOQUEADA
+}
+
+enum StatusAgente {
+  DISPONIVEL
+  EM_EXECUCAO
+  INATIVO
+  ERRO
+}
+
+enum StatusExecucao {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDA
+  FALHA
+}
+
+enum NivelLog {
+  INFO
+  WARN
+  ERROR
+  SUCCESS
+}
+
+enum StatusPedidoFoto {
+  NOVO_LEAD
+  EM_QUALIFICACAO
+  PROPOSTA_ENVIADA
+  FOLLOWUP_1
+  FOLLOWUP_2
+  AGUARDANDO_PAGAMENTO
+  PAGAMENTO_CONFIRMADO
+  EM_PRODUCAO
+  AGUARDANDO_APROVACAO
+  EM_REVISAO
+  ENTREGUE
+  CANCELADO
+  PERDIDO
+}
+
+enum TipoFotoIA {
+  RETRATO_PROFISSIONAL
+  FOTO_PRODUTO
+  FOTO_CORPORATIVA
+  BANNER_REDES_SOCIAIS
+  FOTO_PERFIL
+  CUSTOM
+}
+
+// =============================================================================
+// MULTI-TENANCY: Organizacao & Usuario
+// =============================================================================
+
+model Organizacao {
+  id        String   @id @default(cuid())
+  nome      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relacionamentos
+  usuarios          Usuario[]
+  funis             Funil[]
+  leads             Lead[]
+  tags              Tag[]
+  mensagens         Mensagem[]
+  projetos          Projeto[]
+  contratosFinanceiros ContratoFinanceiro[]
+  lancamentos       Lancamento[]
+  presetServicos    PresetServico[]
+  squads            Squad[]
+  agentes           Agente[]
+  execucoes         Execucao[]
+  pedidosFotoIA     PedidoFotoIA[]
+  fotoIAConfig      FotoIAConfig?
+
+  @@map("organizacoes")
+}
+
+model Usuario {
+  id             String   @id @default(cuid())
+  nome           String
+  email          String
+  senha          String   // bcrypt hash
+  role           Role     @default(OPERACIONAL)
+  ativo          Boolean  @default(true)
+  organizacaoId  String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relacionamentos
+  organizacao    Organizacao   @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  tarefas        Tarefa[]      @relation("TarefaResponsavel")
+  detalhamentos  Detalhamento[]
+  execucoes      Execucao[]    @relation("ExecucaoUsuario")
+
+  @@unique([email, organizacaoId])
+  @@index([organizacaoId])
+  @@map("usuarios")
+}
+
+// =============================================================================
+// CRM: Funil, Etapa, Lead, Tag
+// =============================================================================
+
+model Funil {
+  id            String   @id @default(cuid())
+  nome          String
+  descricao     String?
+  ordem         Int      @default(0)
+  organizacaoId String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relacionamentos
+  organizacao  Organizacao  @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  etapas       EtapaFunil[]
+  leads        Lead[]
+
+  @@index([organizacaoId])
+  @@map("funis")
+}
+
+model EtapaFunil {
+  id               String   @id @default(cuid())
+  nome             String
+  cor              String   @default("#D4AF37") // Agency Gold padrão
+  ordem            Int      @default(0)
+  isVendaRealizada Boolean  @default(false) // Flag para disparar modal de conversão
+  funilId          String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relacionamentos
+  funil  Funil  @relation(fields: [funilId], references: [id], onDelete: Cascade)
+  leads  Lead[]
+
+  @@index([funilId])
+  @@map("etapas_funil")
+}
+
+model Lead {
+  id                 String     @id @default(cuid())
+  nome               String
+  email              String?
+  telefone           String?
+  empresa            String?
+  status             LeadStatus @default(ATIVO)
+  vgvTotal           Decimal?   @db.Decimal(10, 2)
+  recorrenciaMensal  Decimal?   @db.Decimal(10, 2)
+  dataConversao      DateTime?
+  etapaId            String
+  funilId            String
+  organizacaoId      String
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  // Relacionamentos
+  etapa        EtapaFunil         @relation(fields: [etapaId], references: [id])
+  funil        Funil              @relation(fields: [funilId], references: [id])
+  organizacao  Organizacao        @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  tags         LeadTag[]
+  mensagens    Mensagem[]
+  projeto      Projeto?
+  contratos    ContratoFinanceiro[]
+  pedidosFotoIA PedidoFotoIA[]
+
+  @@index([organizacaoId])
+  @@index([funilId])
+  @@index([etapaId])
+  @@index([status])
+  @@index([telefone])
+  @@map("leads")
+}
+
+model Tag {
+  id            String   @id @default(cuid())
+  nome          String
+  cor           String   @default("#D4AF37")
+  organizacaoId String
+  createdAt     DateTime @default(now())
+
+  // Relacionamentos
+  organizacao  Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  leads        LeadTag[]
+
+  @@unique([nome, organizacaoId])
+  @@index([organizacaoId])
+  @@map("tags")
+}
+
+model LeadTag {
+  leadId     String
+  tagId      String
+  createdAt  DateTime @default(now())
+
+  lead  Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tag   Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([leadId, tagId])
+  @@map("lead_tags")
+}
+
+// =============================================================================
+// WHATSAPP: Mensagens
+// =============================================================================
+
+model Mensagem {
+  id               String   @id @default(cuid())
+  corpo            String   @db.Text
+  fromMe           Boolean  @default(false)
+  timestamp        DateTime
+  whatsappId       String   // ID interno do WhatsApp
+  telefoneContato  String
+  lida             Boolean  @default(false)
+  leadId           String?  // null = não identificado
+  organizacaoId    String
+  createdAt        DateTime @default(now())
+
+  // Relacionamentos
+  lead         Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  organizacao  Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
+  @@index([leadId])
+  @@index([telefoneContato, organizacaoId])
+  @@index([lida])
+  @@map("mensagens")
+}
+
+// =============================================================================
+// PROJETOS & TAREFAS
+// =============================================================================
+
+model Projeto {
+  id            String        @id @default(cuid())
+  nome          String
+  tipoServico   String
+  status        StatusProjeto @default(ATIVO)
+  leadId        String        @unique // 1 projeto por lead
+  organizacaoId String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relacionamentos
+  lead         Lead               @relation(fields: [leadId], references: [id])
+  organizacao  Organizacao        @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  sprints      Sprint[]
+  tarefas      Tarefa[]
+  contrato     ContratoFinanceiro?
+
+  @@index([organizacaoId])
+  @@index([status])
+  @@map("projetos")
+}
+
+model Sprint {
+  id            String   @id @default(cuid())
+  nome          String
+  dataInicio    DateTime
+  dataFim       DateTime
+  projetoId     String
+  organizacaoId String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relacionamentos
+  projeto  Projeto  @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  tarefas  Tarefa[]
+
+  @@index([projetoId])
+  @@index([organizacaoId])
+  @@map("sprints")
+}
+
+model Tarefa {
+  id            String       @id @default(cuid())
+  titulo        String
+  descricao     String?      @db.Text
+  status        StatusTarefa @default(PENDENTE)
+  prazo         DateTime?
+  ordem         Int          @default(0)
+  projetoId     String
+  sprintId      String?
+  responsavelId String?
+  organizacaoId String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Relacionamentos
+  projeto      Projeto        @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  sprint       Sprint?        @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  responsavel  Usuario?       @relation("TarefaResponsavel", fields: [responsavelId], references: [id], onDelete: SetNull)
+  detalhamentos Detalhamento[]
+
+  @@index([projetoId])
+  @@index([sprintId])
+  @@index([responsavelId])
+  @@index([status])
+  @@index([prazo])
+  @@map("tarefas")
+}
+
+model Detalhamento {
+  id        String   @id @default(cuid())
+  conteudo  String   @db.Text // HTML do TipTap
+  tarefaId  String
+  autorId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relacionamentos
+  tarefa  Tarefa  @relation(fields: [tarefaId], references: [id], onDelete: Cascade)
+  autor   Usuario @relation(fields: [autorId], references: [id])
+
+  @@index([tarefaId])
+  @@map("detalhamentos")
+}
+
+// =============================================================================
+// PRESETS DE TAREFAS
+// =============================================================================
+
+model PresetServico {
+  id            String   @id @default(cuid())
+  nome          String
+  organizacaoId String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relacionamentos
+  organizacao  Organizacao   @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  tarefas      PresetTarefa[]
+
+  @@unique([nome, organizacaoId])
+  @@index([organizacaoId])
+  @@map("preset_servicos")
+}
+
+model PresetTarefa {
+  id              String   @id @default(cuid())
+  titulo          String
+  descricao       String?  @db.Text
+  ordemPadrao     Int      @default(0)
+  presetServicoId String
+  createdAt       DateTime @default(now())
+
+  // Relacionamentos
+  presetServico  PresetServico @relation(fields: [presetServicoId], references: [id], onDelete: Cascade)
+
+  @@index([presetServicoId])
+  @@map("preset_tarefas")
+}
+
+// =============================================================================
+// FINANCEIRO: ContratoFinanceiro & Lancamento
+// =============================================================================
+
+model ContratoFinanceiro {
+  id                 String        @id @default(cuid())
+  valorTotal         Decimal       @db.Decimal(10, 2)
+  recorrenciaMensal  Decimal?      @db.Decimal(10, 2)
+  tipoPagamento      TipoPagamento
+  dataInicio         DateTime
+  numeroParcelas     Int?
+  ativo              Boolean       @default(true)
+  motivoEncerramento String?
+  projetoId          String        @unique // 1 contrato por projeto
+  leadId             String
+  organizacaoId      String
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  // Relacionamentos
+  projeto      Projeto     @relation(fields: [projetoId], references: [id])
+  lead         Lead        @relation(fields: [leadId], references: [id])
+  organizacao  Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  lancamentos  Lancamento[]
+
+  @@index([organizacaoId])
+  @@index([leadId])
+  @@index([ativo])
+  @@map("contratos_financeiros")
+}
+
+model Lancamento {
+  id              String           @id @default(cuid())
+  descricao       String
+  valor           Decimal          @db.Decimal(10, 2)
+  dataVencimento  DateTime
+  dataPagamento   DateTime?
+  valorPago       Decimal?         @db.Decimal(10, 2)
+  status          StatusLancamento @default(PENDENTE)
+  tipo            TipoLancamento
+  contratoId      String
+  organizacaoId   String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relacionamentos
+  contrato     ContratoFinanceiro @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+  organizacao  Organizacao        @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
+  @@index([contratoId])
+  @@index([status])
+  @@index([dataVencimento])
+  @@map("lancamentos")
+}
+
+// =============================================================================
+// SQUAD & AGENTES DE IA
+// =============================================================================
+
+model Squad {
+  id            String   @id @default(cuid())
+  nome          String
+  descricao     String?
+  avatar        String   @default("🤖") // Emoji ou URL
+  cor           String   @default("#D4AF37")
+  ativo         Boolean  @default(true)
+  organizacaoId String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relacionamentos
+  organizacao  Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  agentes      Agente[]
+
+  @@index([organizacaoId])
+  @@map("squads")
+}
+
+model Agente {
+  id            String       @id @default(cuid())
+  nome          String
+  role          String       // "dev", "qa", "pm", "analyst", etc.
+  icone         String       @default("🤖")
+  descricao     String?
+  status        StatusAgente @default(DISPONIVEL)
+  configuracao  Json         @default("{}") // Parâmetros: modelo, temperatura, etc.
+  squadId       String
+  organizacaoId String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Relacionamentos
+  squad        Squad       @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  organizacao  Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  execucoes    Execucao[]
+
+  @@index([squadId])
+  @@index([organizacaoId])
+  @@index([status])
+  @@map("agentes")
+}
+
+model Execucao {
+  id            String         @id @default(cuid())
+  comando       String         @db.Text
+  input         Json?
+  output        String?        @db.Text
+  status        StatusExecucao @default(PENDENTE)
+  iniciadoEm    DateTime       @default(now())
+  concluidoEm   DateTime?
+  duracaoMs     Int?
+  agenteId      String
+  usuarioId     String
+  organizacaoId String
+  createdAt     DateTime       @default(now())
+
+  // Relacionamentos
+  agente      Agente        @relation(fields: [agenteId], references: [id], onDelete: Cascade)
+  usuario     Usuario       @relation("ExecucaoUsuario", fields: [usuarioId], references: [id])
+  organizacao Organizacao   @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  logs        LogExecucao[]
+
+  @@index([agenteId])
+  @@index([organizacaoId])
+  @@index([status])
+  @@index([iniciadoEm])
+  @@map("execucoes")
+}
+
+model LogExecucao {
+  id          String    @id @default(cuid())
+  nivel       NivelLog
+  mensagem    String    @db.Text
+  timestamp   DateTime  @default(now())
+  execucaoId  String
+
+  // Relacionamentos
+  execucao  Execucao @relation(fields: [execucaoId], references: [id], onDelete: Cascade)
+
+  @@index([execucaoId])
+  @@index([timestamp])
+  @@map("logs_execucao")
+}
+
+// =============================================================================
+// FOTO IA — Serviço de Fotos Profissionais por IA
+// =============================================================================
+
+model PedidoFotoIA {
+  id                  String            @id @default(cuid())
+  organizacaoId       String
+  leadId              String
+  status              StatusPedidoFoto  @default(NOVO_LEAD)
+  tipoFoto            TipoFotoIA
+  descricao           String?           @db.Text   // briefing do cliente
+  valorCobrado        Decimal?          @db.Decimal(10, 2)
+  linkPagamento       String?
+  cobrancaId          String?           // ID da cobrança no gateway de pagamento
+  predictionId        String?           // ID da prediction no Replicate
+  tentativasGeracao   Int               @default(0)
+  rodadasRevisao      Int               @default(0)
+  promptUsado         String?           @db.Text   // prompt da IA que gerou
+  observacoes         String?           @db.Text
+  tokenGaleria        String?           @unique    // token JWT para acesso à galeria pública
+  aprovadoEm          DateTime?
+  entregueEm          DateTime?
+  criadoEm            DateTime          @default(now())
+  atualizadoEm        DateTime          @updatedAt
+
+  // Relacionamentos
+  organizacao  Organizacao        @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  lead         Lead               @relation(fields: [leadId], references: [id])
+  imagens      ImagemFotoIA[]
+  execucoes    ExecucaoFotoIA[]
+  queue        GeracaoQueue?
+
+  @@index([organizacaoId])
+  @@index([leadId])
+  @@index([status])
+  @@index([criadoEm])
+  @@map("pedidos_foto_ia")
+}
+
+model ImagemFotoIA {
+  id          String       @id @default(cuid())
+  pedidoId    String
+  url         String       // URL do storage (S3 ou local)
+  urlPublica  String?      // URL temporária para aprovação pelo cliente
+  tipo        String       // "gerada" | "revisada" | "entregue"
+  rodada      Int          @default(1)
+  aprovada    Boolean      @default(false)
+  criadoEm   DateTime     @default(now())
+
+  // Relacionamentos
+  pedido  PedidoFotoIA @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  @@index([pedidoId])
+  @@index([aprovada])
+  @@map("imagens_foto_ia")
+}
+
+model ExecucaoFotoIA {
+  id          String       @id @default(cuid())
+  pedidoId    String
+  etapa       String       // nome da task executada (ex: "gerar-imagens")
+  status      String       // "iniciado" | "concluido" | "erro"
+  entrada     Json?        // dados de entrada da execução
+  saida       Json?        // resultado da execução
+  erro        String?      @db.Text
+  executadoEm DateTime     @default(now())
+  duracaoMs   Int?
+
+  // Relacionamentos
+  pedido  PedidoFotoIA @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  @@index([pedidoId])
+  @@index([etapa])
+  @@index([executadoEm])
+  @@map("execucoes_foto_ia")
+}
+
+model FotoIAConfig {
+  id               String   @id @default(cuid())
+  organizacaoId    String   @unique
+  // Preços por tipo (JSON: { RETRATO_PROFISSIONAL: { preco: 97, qtdImagens: 5, ativo: true }, ... })
+  precos           Json     @default("{}")
+  // Prompts por tipo (JSON: { RETRATO_PROFISSIONAL: { promptBase: "...", promptNegativo: "..." }, ... })
+  prompts          Json     @default("{}")
+  // Templates de mensagem WhatsApp
+  templates        Json     @default("{}")
+  // Configurações de integração
+  replicateModel   String   @default("stability-ai/sdxl:39ed52f2319f9bf9f645aca573a99de73eb0b239b0d6f71022b56c8e617ee7c1")
+  gatewayProvider  String   @default("asaas")
+  storageProvider  String   @default("local")
+  // Limites operacionais
+  maxSimultaneos   Int      @default(3)
+  maxTentativas    Int      @default(3)
+  timeoutFollowup  Int      @default(24) // horas para followup 1
+  timeoutPerdido   Int      @default(72) // horas para marcar como perdido
+  criadoEm         DateTime @default(now())
+  atualizadoEm     DateTime @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@map("foto_ia_configs")
+}
+
+model GeracaoQueue {
+  id         String   @id @default(cuid())
+  pedidoId   String   @unique
+  prioridade Int      @default(0)
+  tentativas Int      @default(0)
+  processado Boolean  @default(false)
+  criadoEm   DateTime @default(now())
+
+  pedido PedidoFotoIA @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  @@index([processado])
+  @@index([prioridade])
+  @@map("geracao_queue")
+}

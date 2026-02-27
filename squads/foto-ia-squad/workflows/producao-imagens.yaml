@@ -1,0 +1,51 @@
+id: producao-imagens
+name: Produção de Imagens FotoIA
+description: Workflow de geração de imagens via IA e revisões
+version: 1.0.0
+
+trigger:
+  event: pagamento_confirmado
+  condition: status == "PAGAMENTO_CONFIRMADO"
+
+steps:
+  - id: step_1_gerar
+    task: gerar-imagens
+    agent: produtor-ia
+    input:
+      pedidoId: "{{pedido.id}}"
+      tipoFoto: "{{pedido.tipoFoto}}"
+      descricao: "{{pedido.descricao}}"
+      rodada: 1
+    timeout_minutes: 30
+    on_success:
+      next: entrega-aprovacao  # handoff para próximo workflow
+    on_failure:
+      retry: 2
+      on_retry_failure:
+        action: notificar_gestor
+        message: "Falha na geração de imagens para pedido {{pedido.id}}"
+
+  # Revisão (ativado quando status vai para EM_REVISAO)
+  - id: step_revisao
+    task: processar-revisao
+    agent: produtor-ia
+    trigger:
+      event: revisao_solicitada
+      condition: status == "EM_REVISAO"
+    input:
+      pedidoId: "{{pedido.id}}"
+      tipoFoto: "{{pedido.tipoFoto}}"
+      feedbackRevisao: "{{cliente.feedbackRevisao}}"
+      rodada: "{{pedido.rodadasRevisao}}"
+    condition:
+      - "{{pedido.rodadasRevisao}} <= {{config.maxRevisoes}}"
+    on_success:
+      next: entrega-aprovacao
+    on_condition_fail:
+      action: solicitar_pagamento_revisao_extra
+      agent: cobrador-ia
+
+outputs:
+  - imagensGeradas
+  - urlsStorage
+  - duracaoGeracaoMs

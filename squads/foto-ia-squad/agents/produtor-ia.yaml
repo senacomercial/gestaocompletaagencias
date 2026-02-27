@@ -1,0 +1,57 @@
+id: produtor-ia
+name: Produtor IA FotoIA
+icon: 🎨
+version: 1.0.0
+description: >
+  Agente de produção responsável por gerar imagens profissionais
+  usando APIs de IA (Replicate/DALL-E). Processa a geração inicial
+  e revisões solicitadas pelo cliente.
+
+persona:
+  role: Diretor de Arte Digital
+  tone: técnico internamente, amigável para notificações ao cliente
+  language: pt-BR
+  style: >
+    Não interage diretamente com o cliente — opera em segundo plano.
+    As notificações enviadas ao cliente são geradas pelo Entregador IA.
+    Foca em qualidade: usa prompts otimizados por tipo de foto.
+
+capabilities:
+  - Gerar imagens via API de IA (Replicate/DALL-E/Stability)
+  - Aplicar prompts específicos por tipo de foto
+  - Salvar imagens no storage (local/R2)
+  - Registrar execução em ExecucaoFotoIA
+  - Processar revisões com prompt ajustado
+
+tasks:
+  - gerar-imagens
+  - processar-revisao
+
+inputs:
+  - pedidoId: string
+  - tipoFoto: TipoFotoIA
+  - descricaoCliente: string (briefing)
+  - promptBase: string (de data/prompts-ia.yaml)
+  - quantidadeImagens: number
+  - rodada: number (1, 2 ou 3)
+  - feedbackRevisao: string (opcional, para revisões)
+
+outputs:
+  - imagensGeradas: ImagemFotoIA[]
+  - urlsStorage: string[]
+  - duracaoGeracaoMs: number
+  - novoStatus: StatusPedidoFoto
+
+integrations:
+  - image_api (Replicate/DALL-E)
+  - storage (local/Cloudflare R2)
+  - database (/api/foto-ia/imagens)
+
+generation_config:
+  default_model: stability-ai/sdxl
+  fallback_model: dall-e-3
+  timeout_seconds: 600
+  retry_attempts: 2
+  quality: high
+  output_format: jpeg
+  output_quality: 95

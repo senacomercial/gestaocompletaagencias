@@ -1,0 +1,56 @@
+# Tabela de Preços FotoIA
+# Editável via /foto-ia/configuracoes no painel admin
+
+precos:
+  RETRATO_PROFISSIONAL:
+    label: "Retrato Profissional"
+    descricao: "Ideal para LinkedIn, site pessoal, cartão de visita"
+    valor: 97.00
+    quantidade_imagens: 5
+    max_revisoes: 2
+    tempo_estimado_min: 10
+
+  FOTO_PRODUTO:
+    label: "Foto de Produto"
+    descricao: "Para e-commerce, catálogos, redes sociais"
+    valor: 147.00
+    quantidade_imagens: 10
+    max_revisoes: 2
+    tempo_estimado_min: 15
+
+  FOTO_CORPORATIVA:
+    label: "Foto Corporativa"
+    descricao: "Equipe, escritório, eventos empresariais"
+    valor: 197.00
+    quantidade_imagens: 8
+    max_revisoes: 2
+    tempo_estimado_min: 12
+
+  BANNER_REDES_SOCIAIS:
+    label: "Banner para Redes Sociais"
+    descricao: "Posts, stories, capas — todos os formatos"
+    valor: 127.00
+    quantidade_imagens: 5
+    max_revisoes: 2
+    tempo_estimado_min: 8
+
+  FOTO_PERFIL:
+    label: "Foto de Perfil"
+    descricao: "Avatar profissional para qualquer plataforma"
+    valor: 67.00
+    quantidade_imagens: 3
+    max_revisoes: 2
+    tempo_estimado_min: 7
+
+  CUSTOM:
+    label: "Personalizado"
+    descricao: "Briefing personalizado — preço sob consulta"
+    valor: 0.00  # definido manualmente pelo gestor
+    quantidade_imagens: 5
+    max_revisoes: 2
+    tempo_estimado_min: 15
+
+# Taxa de revisão extra (após max_revisoes inclusas)
+revisao_extra:
+  valor: 47.00
+  descricao: "Por rodada adicional de ajustes"

@@ -1,0 +1,95 @@
+id: sales-funnel
+name: Funil de Vendas FotoIA
+description: Workflow completo de vendas — do lead novo até pagamento confirmado
+version: 1.0.0
+
+trigger:
+  event: pedido_criado
+  condition: status == "NOVO_LEAD"
+
+steps:
+  - id: step_1_qualificar
+    task: qualificar-lead
+    agent: vendedor-ia
+    input:
+      leadId: "{{pedido.leadId}}"
+      pedidoId: "{{pedido.id}}"
+    on_success:
+      next: step_2_proposta
+    on_failure:
+      action: log_error
+      next: null
+
+  - id: step_2_proposta
+    task: enviar-proposta
+    agent: vendedor-ia
+    condition: "{{lead.respostaRecebida}} == true"
+    input:
+      pedidoId: "{{pedido.id}}"
+      tipoFoto: "{{pedido.tipoFoto}}"
+    on_success:
+      next: step_3_aguardar_decisao
+    on_timeout:
+      hours: 24
+      next: step_followup_1
+
+  - id: step_followup_1
+    task: fazer-followup
+    agent: vendedor-ia
+    input:
+      pedidoId: "{{pedido.id}}"
+      rodadaFollowup: 1
+    on_success:
+      next: step_3_aguardar_decisao
+    on_timeout:
+      hours: 24
+      next: step_followup_2
+
+  - id: step_followup_2
+    task: fazer-followup
+    agent: vendedor-ia
+    input:
+      pedidoId: "{{pedido.id}}"
+      rodadaFollowup: 2
+    on_success:
+      next: step_3_aguardar_decisao
+    on_timeout:
+      hours: 24
+      action: marcar_como_perdido
+
+  - id: step_3_aguardar_decisao
+    type: wait_for_event
+    event: cliente_aceitou_proposta
+    timeout_hours: 72
+    on_event:
+      next: step_4_pagamento
+    on_timeout:
+      action: marcar_como_perdido
+
+  - id: step_4_pagamento
+    task: enviar-link-pgto
+    agent: cobrador-ia
+    input:
+      pedidoId: "{{pedido.id}}"
+      valor: "{{preco.valor}}"
+    on_success:
+      next: step_5_aguardar_pgto
+
+  - id: step_5_aguardar_pgto
+    type: wait_for_webhook
+    webhook: pagamento_confirmado
+    timeout_hours: 48
+    on_event:
+      next: producao-imagens  # handoff para próximo workflow
+    on_timeout:
+      task: reenviar-link-pgto
+      agent: cobrador-ia
+      on_retry_timeout:
+        hours: 24
+        action: marcar_como_perdido
+
+outputs:
+  - pedidoId
+  - status
+  - valorCobrado
+  - cobrancaId

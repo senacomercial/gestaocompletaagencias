@@ -1,0 +1,48 @@
+# Portfolio de Exemplos FotoIA
+# Links enviados na proposta comercial para o cliente ver exemplos
+
+portfolio:
+  RETRATO_PROFISSIONAL:
+    descricao: "Exemplos de retratos profissionais gerados por IA"
+    link: "https://portfolio.fotoiaagencia.com/retratos"
+    exemplos_texto: >
+      Fotos no estilo LinkedIn, com fundo neutro e iluminação de estúdio.
+      Parecem fotos tiradas por fotógrafo profissional!
+
+  FOTO_PRODUTO:
+    descricao: "Exemplos de fotos de produto"
+    link: "https://portfolio.fotoiaagencia.com/produtos"
+    exemplos_texto: >
+      Fotos de produto com fundo branco, iluminação de estúdio
+      e acabamento profissional para e-commerce.
+
+  FOTO_CORPORATIVA:
+    descricao: "Exemplos de fotos corporativas"
+    link: "https://portfolio.fotoiaagencia.com/corporativo"
+    exemplos_texto: >
+      Fotos de equipe em ambiente corporativo moderno.
+      Perfeitas para site institucional e LinkedIn da empresa.
+
+  BANNER_REDES_SOCIAIS:
+    descricao: "Exemplos de banners para redes sociais"
+    link: "https://portfolio.fotoiaagencia.com/banners"
+    exemplos_texto: >
+      Banners criativos para Instagram, Facebook e LinkedIn.
+      Layouts modernos prontos para publicar!
+
+  FOTO_PERFIL:
+    descricao: "Exemplos de fotos de perfil"
+    link: "https://portfolio.fotoiaagencia.com/perfil"
+    exemplos_texto: >
+      Avatares profissionais para qualquer rede social.
+      Transmite credibilidade e profissionalismo!
+
+  CUSTOM:
+    descricao: "Portfólio geral"
+    link: "https://portfolio.fotoiaagencia.com"
+    exemplos_texto: >
+      Veja nosso portfólio completo com exemplos de todos os tipos
+      de fotos geradas por IA!
+
+# Nota: Substituir pelos links reais do portfólio da agência
+# Configurável em /foto-ia/configuracoes

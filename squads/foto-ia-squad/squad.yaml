@@ -1,0 +1,144 @@
+name: foto-ia-squad
+version: 1.0.0
+description: >
+  Squad automatizado de vendas e entrega de fotos profissionais por IA.
+  Gerencia o ciclo completo: captação do lead, venda via WhatsApp,
+  cobrança, geração de imagens IA e entrega ao cliente.
+author: Morgan (PM Agent)
+created_at: "2026-02-23"
+
+# Agentes do squad
+agents:
+  - id: vendedor-ia
+    file: agents/vendedor-ia.yaml
+    description: Conduz vendas via WhatsApp do primeiro contato até aceite
+
+  - id: cobrador-ia
+    file: agents/cobrador-ia.yaml
+    description: Processa pagamentos e monitora confirmações
+
+  - id: produtor-ia
+    file: agents/produtor-ia.yaml
+    description: Gera imagens profissionais via API de IA
+
+  - id: entregador-ia
+    file: agents/entregador-ia.yaml
+    description: Envia galeria ao cliente e processa aprovação
+
+# Tasks do squad
+tasks:
+  - id: qualificar-lead
+    file: tasks/qualificar-lead.md
+    agent: vendedor-ia
+    trigger: status_change:NOVO_LEAD
+
+  - id: enviar-proposta
+    file: tasks/enviar-proposta.md
+    agent: vendedor-ia
+    trigger: status_change:EM_QUALIFICACAO
+
+  - id: fazer-followup
+    file: tasks/fazer-followup.md
+    agent: vendedor-ia
+    trigger: scheduled:24h_sem_resposta
+
+  - id: enviar-link-pgto
+    file: tasks/enviar-link-pgto.md
+    agent: cobrador-ia
+    trigger: status_change:AGUARDANDO_PAGAMENTO
+
+  - id: confirmar-pagamento
+    file: tasks/confirmar-pagamento.md
+    agent: cobrador-ia
+    trigger: webhook:pagamento_confirmado
+
+  - id: gerar-imagens
+    file: tasks/gerar-imagens.md
+    agent: produtor-ia
+    trigger: status_change:PAGAMENTO_CONFIRMADO
+
+  - id: enviar-para-aprovacao
+    file: tasks/enviar-para-aprovacao.md
+    agent: entregador-ia
+    trigger: status_change:EM_PRODUCAO
+
+  - id: processar-revisao
+    file: tasks/processar-revisao.md
+    agent: produtor-ia
+    trigger: status_change:EM_REVISAO
+
+  - id: entregar-servico
+    file: tasks/entregar-servico.md
+    agent: entregador-ia
+    trigger: status_change:AGUARDANDO_APROVACAO:aprovado
+
+# Workflows
+workflows:
+  - id: sales-funnel
+    file: workflows/sales-funnel.yaml
+    description: Fluxo completo de vendas FotoIA
+
+  - id: producao-imagens
+    file: workflows/producao-imagens.yaml
+    description: Workflow de geração e revisão de imagens
+
+  - id: entrega-aprovacao
+    file: workflows/entrega-aprovacao.yaml
+    description: Workflow de entrega e aprovação pelo cliente
+
+# Integrações externas
+integrations:
+  whatsapp:
+    provider: baileys
+    required: true
+    description: Comunicação com leads e clientes
+
+  payment_gateway:
+    provider: asaas
+    fallback: mercadopago
+    required: true
+    description: Geração de cobranças e webhooks
+
+  image_api:
+    provider: replicate
+    fallback: openai_dalle
+    required: true
+    description: Geração de imagens por IA
+
+  storage:
+    provider: local
+    production: cloudflare_r2
+    required: true
+    description: Armazenamento das imagens geradas
+
+# Dados de configuração
+data:
+  - file: data/precos.yaml
+    description: Tabela de preços por tipo de foto
+  - file: data/prompts-ia.yaml
+    description: Prompts de IA por tipo de foto
+  - file: data/portfolio-exemplos.yaml
+    description: Links de exemplos para propostas
+
+# Templates de mensagens WhatsApp
+templates:
+  - file: templates/whatsapp-saudacao.md
+  - file: templates/whatsapp-proposta.md
+  - file: templates/whatsapp-followup-1.md
+  - file: templates/whatsapp-followup-2.md
+  - file: templates/whatsapp-link-pgto.md
+  - file: templates/whatsapp-producao.md
+  - file: templates/whatsapp-aprovacao.md
+  - file: templates/whatsapp-entrega.md
+
+# Configuração de automação
+automation:
+  followup_1_delay_hours: 24
+  followup_2_delay_hours: 48
+  lead_timeout_hours: 72
+  max_revisoes: 2
+  revisao_extra_valor: 47.00
+  payment_timeout_hours: 48
+
+# Referência ao PRD
+prd: docs/prd/foto-ia-service.md
