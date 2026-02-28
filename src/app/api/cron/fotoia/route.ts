@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { StatusPedidoFoto } from '@prisma/client'
 import { executarFollowUp } from '@/lib/fotoia/agents/vendedor'
 import { gerarImagens } from '@/lib/fotoia/agents/produtor'
+import { verificarPedidosTravados } from '@/lib/fotoia/alerts'
 import { subHours } from 'date-fns'
 
 // GET /api/cron/fotoia — executado a cada hora via Vercel Cron
@@ -22,6 +23,7 @@ export async function GET(req: NextRequest) {
     followup2: 0,
     perdidos: 0,
     queueProcessados: 0,
+    alertasGerados: 0,
   }
 
   // 1. Follow-up 1: PROPOSTA_ENVIADA há > 24h
@@ -101,6 +103,44 @@ export async function GET(req: NextRequest) {
         data: { tentativas: { increment: 1 } },
       })
     }
+  }
+
+  // 5. Verificar pedidos travados — AC:4 Story 8.7
+  try {
+    // Obter organizações com pedidos ativos
+    const orgsAtivas = await prisma.pedidoFotoIA.findMany({
+      where: {
+        status: {
+          notIn: [StatusPedidoFoto.ENTREGUE, StatusPedidoFoto.CANCELADO, StatusPedidoFoto.PERDIDO],
+        },
+      },
+      select: { organizacaoId: true },
+      distinct: ['organizacaoId'],
+    })
+
+    for (const { organizacaoId } of orgsAtivas) {
+      const alertas = await verificarPedidosTravados(organizacaoId)
+
+      // Persistir alertas como execuções de controle para acesso via painel
+      for (const alerta of alertas) {
+        await prisma.execucaoFotoIA.create({
+          data: {
+            pedidoId: alerta.pedidoId,
+            etapa: `alerta:${alerta.tipo}`,
+            status: 'erro',
+            saida: {
+              titulo: alerta.titulo,
+              descricao: alerta.descricao,
+              tipo: alerta.tipo,
+              geradoEm: agora.toISOString(),
+            },
+          },
+        })
+        resultados.alertasGerados++
+      }
+    }
+  } catch (e) {
+    console.error('[Cron] Erro ao verificar pedidos travados:', e)
   }
 
   return NextResponse.json({ ok: true, agora: agora.toISOString(), ...resultados })

@@ -1,10 +1,19 @@
 import { prisma } from '@/lib/prisma'
 import { StatusPedidoFoto } from '@prisma/client'
-import { createPixCharge } from '@/lib/fotoia/payment/mercadopago'
+import { enviarTexto } from '@/lib/fotoia/whatsapp/wa-sender'
+import { getPixConfig } from '@/lib/fotoia/payment/pix-manual'
+import { validarComprovanteComIA } from '@/lib/fotoia/payment/pix-manual'
+import { onStatusChange } from '@/lib/fotoia/pipeline-orchestrator'
+
+const PACOTE_LABELS: Record<string, { label: string; qtd: number; revisoes: number }> = {
+  BASICO:       { label: 'Básico',           qtd: 5,  revisoes: 1 },
+  PROFISSIONAL: { label: 'Profissional ⭐',  qtd: 10, revisoes: 4 },
+  PREMIUM:      { label: 'Premium',          qtd: 30, revisoes: 10 },
+}
 
 /**
- * Agente Cobrador IA — Geração de cobrança PIX e acompanhamento de pagamento
- * Responsável por: PROPOSTA_ENVIADA → AGUARDANDO_PAGAMENTO → PAGAMENTO_CONFIRMADO
+ * Envia a chave PIX ao cliente via WhatsApp com copy empática.
+ * Chamado após o cliente escolher o pacote.
  */
 export async function gerarCobranca(pedidoId: string): Promise<void> {
   const pedido = await prisma.pedidoFotoIA.findUnique({
@@ -13,55 +22,132 @@ export async function gerarCobranca(pedidoId: string): Promise<void> {
   })
   if (!pedido) throw new Error(`Pedido ${pedidoId} não encontrado`)
 
-  // Não gerar nova cobrança se já existe uma pendente
-  if (pedido.cobrancaId && pedido.status === StatusPedidoFoto.AGUARDANDO_PAGAMENTO) {
+  if (pedido.cobrancaId && pedido.status === StatusPedidoFoto.AGUARDANDO_PAGAMENTO) return
+
+  const pix = getPixConfig()
+  if (!pix) throw new Error('PIX_CHAVE não configurada no .env')
+
+  const nome = pedido.lead.nome.split(' ')[0]
+  const telefone = pedido.lead.telefone
+  const valor = Number(pedido.valorCobrado ?? 47)
+  const pacoteInfo = PACOTE_LABELS[pedido.pacote ?? 'PROFISSIONAL'] ?? PACOTE_LABELS.PROFISSIONAL
+
+  const valorFmt = valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+  const mensagem =
+    `Olá, ${nome}! 😊
+
+` +
+    `Ótima escolha! Seu pacote *${pacoteInfo.label}* está reservado com ` +
+    `${pacoteInfo.qtd} fotos incríveis e ${pacoteInfo.revisoes} revisão(ões) incluída(s) ✨
+
+` +
+    `Para começarmos a produção, realize o PIX abaixo:
+
+` +
+    `💰 *Valor:* ${valorFmt}
+` +
+    `🔑 *Chave PIX (${pix.tipo}):* \`${pix.chave}\`
+` +
+    `👤 *Beneficiário:* ${pix.nome}
+
+` +
+    `Após o pagamento, é só me enviar o *comprovante aqui mesmo* que confirmo na hora e já dou início às suas fotos! 📸
+
+` +
+    `Qualquer dúvida, estou por aqui 🙏`
+
+  await enviarTexto(pedido.organizacaoId, telefone!, mensagem)
+
+  await prisma.pedidoFotoIA.update({
+    where: { id: pedidoId },
+    data: {
+      status: StatusPedidoFoto.AGUARDANDO_PAGAMENTO,
+      cobrancaId: pedidoId,
+      linkPagamento: pix.chave,
+    },
+  })
+
+  await registrarExecucao(pedidoId, 'gerar-cobranca', 'concluido', {
+    modo: 'pix_manual',
+    chavePix: pix.chave,
+    valor,
+  })
+}
+
+/**
+ * Processa imagem de comprovante recebida via WhatsApp.
+ * Usa Claude Haiku para validar valor + destinatário.
+ */
+export async function processarComprovante(
+  pedidoId: string,
+  imagemBuffer: Buffer,
+  mimeType: string,
+  organizacaoId: string,
+  telefone: string,
+): Promise<void> {
+  const pedido = await prisma.pedidoFotoIA.findUnique({
+    where: { id: pedidoId },
+    select: { valorCobrado: true },
+  })
+  if (!pedido) return
+
+  const pix = getPixConfig()
+  if (!pix) return
+
+  await enviarTexto(organizacaoId, telefone, '🔍 Analisando seu comprovante... Um momento!')
+
+  await registrarExecucao(pedidoId, 'validar-comprovante', 'iniciado', { mimeType })
+
+  let resultado
+  try {
+    resultado = await validarComprovanteComIA(
+      imagemBuffer,
+      mimeType,
+      Number(pedido.valorCobrado ?? 0),
+      pix.chave,
+      pix.nome,
+    )
+  } catch (err) {
+    await enviarTexto(
+      organizacaoId,
+      telefone,
+      '⚠️ Não consegui processar o comprovante. Por favor, envie novamente como imagem (JPG ou PNG) ou PDF.',
+    )
+    await registrarExecucao(pedidoId, 'validar-comprovante', 'erro', { erro: String(err) })
     return
   }
 
-  await registrarExecucao(pedidoId, 'gerar-cobranca', 'iniciado', {})
+  await registrarExecucao(pedidoId, 'validar-comprovante', resultado.valido ? 'concluido' : 'erro', resultado as unknown as Record<string, unknown>)
 
-  try {
-    const charge = await createPixCharge({
-      customerName: pedido.lead.nome,
-      customerEmail: pedido.lead.email ?? `lead-${pedido.lead.id}@fotoia.local`,
-      value: Number(pedido.valorCobrado ?? 97),
-      description: `FotoIA - ${pedido.tipoFoto.replace(/_/g, ' ')}`,
-      idempotencyKey: `fotoia-${pedidoId}`,
-    })
+  if (!resultado.valido) {
+    await enviarTexto(
+      organizacaoId,
+      telefone,
+      `❌ Não consegui confirmar o pagamento.
 
-    await prisma.pedidoFotoIA.update({
-      where: { id: pedidoId },
-      data: {
-        status: StatusPedidoFoto.AGUARDANDO_PAGAMENTO,
-        cobrancaId: charge.chargeId,
-        linkPagamento: charge.pixQrCode, // armazena o copia-e-cola PIX
-        observacoes: charge.pixQrCodeBase64
-          ? `pix_qrcode_base64:${charge.pixQrCodeBase64}`
-          : undefined,
-      },
-    })
+_${resultado.motivo}_
 
-    await registrarExecucao(pedidoId, 'gerar-cobranca', 'concluido', {
-      novoStatus: 'AGUARDANDO_PAGAMENTO',
-      chargeId: charge.chargeId,
-      pixGerado: true,
-    })
-  } catch (error) {
-    await registrarExecucao(pedidoId, 'gerar-cobranca', 'erro', {
-      erro: String(error),
-    })
-    throw error
+Pode enviar o comprovante novamente? Certifique-se que o valor e o destinatário estão corretos 🙏`,
+    )
+    return
   }
+
+  await confirmarPagamento(pedidoId)
+  await enviarTexto(
+    organizacaoId,
+    telefone,
+    '✅ *Pagamento confirmado!* Agora vou precisar de algumas informações para criar suas fotos incríveis 📸',
+  )
+  await onStatusChange(pedidoId, StatusPedidoFoto.PAGAMENTO_CONFIRMADO)
 }
 
 export async function confirmarPagamento(pedidoId: string): Promise<void> {
   await registrarExecucao(pedidoId, 'confirmar-pagamento', 'iniciado', {})
-
   await prisma.pedidoFotoIA.update({
     where: { id: pedidoId },
     data: { status: StatusPedidoFoto.PAGAMENTO_CONFIRMADO },
   })
-
   await registrarExecucao(pedidoId, 'confirmar-pagamento', 'concluido', {
     novoStatus: 'PAGAMENTO_CONFIRMADO',
   })

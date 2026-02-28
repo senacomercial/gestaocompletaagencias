@@ -2,73 +2,69 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { startOfWeek, startOfMonth, subWeeks, subMonths } from 'date-fns'
 
-// GET /api/foto-ia/relatorio?periodo=semana|mes
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const periodo = req.nextUrl.searchParams.get('periodo') ?? 'semana'
   const orgId = session.user.organizacaoId
+  const { searchParams } = new URL(req.url)
+  const periodo = searchParams.get('periodo') ?? 'semana'
 
-  const now = new Date()
-  const inicio = periodo === 'mes'
-    ? startOfMonth(now)
-    : startOfWeek(now, { weekStartsOn: 1 })
-  const inicioAnterior = periodo === 'mes'
-    ? startOfMonth(subMonths(now, 1))
-    : startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 })
-  const fimAnterior = inicio
+  const agora = new Date()
+  let desde: Date
 
-  const [
-    pedidosPeriodo,
-    pedidosAnterior,
-    entreguesPeriodo,
-    receitaPeriodo,
-    tempoMedio,
-  ] = await Promise.all([
-    prisma.pedidoFotoIA.count({
-      where: { organizacaoId: orgId, criadoEm: { gte: inicio } },
-    }),
-    prisma.pedidoFotoIA.count({
-      where: { organizacaoId: orgId, criadoEm: { gte: inicioAnterior, lt: fimAnterior } },
-    }),
-    prisma.pedidoFotoIA.count({
-      where: { organizacaoId: orgId, status: 'ENTREGUE', entregueEm: { gte: inicio } },
-    }),
+  switch (periodo) {
+    case 'mes':   desde = new Date(agora.getFullYear(), agora.getMonth(), 1);    break
+    case 'semana': desde = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);  break
+    case 'hoje':   desde = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()); break
+    default:      desde = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000)
+  }
+
+  const [criados, concluidos, receita, porStatus, tempos] = await Promise.all([
+    prisma.pedidoFotoIA.count({ where: { organizacaoId: orgId, criadoEm: { gte: desde } } }),
+    prisma.pedidoFotoIA.count({ where: { organizacaoId: orgId, status: 'ENTREGUE', entregueEm: { gte: desde } } }),
     prisma.pedidoFotoIA.aggregate({
-      where: { organizacaoId: orgId, status: 'ENTREGUE', entregueEm: { gte: inicio } },
+      where: { organizacaoId: orgId, status: 'ENTREGUE', entregueEm: { gte: desde } },
       _sum: { valorCobrado: true },
     }),
+    prisma.pedidoFotoIA.groupBy({
+      by: ['status'],
+      where: { organizacaoId: orgId, criadoEm: { gte: desde } },
+      _count: true,
+    }),
     prisma.pedidoFotoIA.findMany({
-      where: { organizacaoId: orgId, status: 'ENTREGUE', criadoEm: { gte: inicio } },
-      select: { criadoEm: true, entregueEm: true },
+      where: { organizacaoId: orgId, status: 'ENTREGUE', entregueEm: { gte: desde }, criadoEm: { not: undefined } },
+      select: { criadoEm: true, entregueEm: true, rodadasRevisao: true },
     }),
   ])
 
-  const taxaConversao = pedidosPeriodo > 0
-    ? Math.round((entreguesPeriodo / pedidosPeriodo) * 100)
-    : 0
+  const totalCriados = criados
+  const totalConcluidos = concluidos
+  const receitaTotal = Number(receita._sum.valorCobrado ?? 0)
+  const taxaConversao = totalCriados > 0 ? Math.round((totalConcluidos / totalCriados) * 100) : 0
 
-  const tempoMedioMs = tempoMedio.length > 0
-    ? tempoMedio.reduce((acc, p) => {
+  const tempoMedio = tempos.length > 0
+    ? Math.round(tempos.reduce((acc, p) => {
         if (!p.entregueEm) return acc
         return acc + (p.entregueEm.getTime() - p.criadoEm.getTime())
-      }, 0) / tempoMedio.length
+      }, 0) / tempos.length / (1000 * 60 * 60))
     : 0
 
-  const crescimento = pedidosAnterior > 0
-    ? Math.round(((pedidosPeriodo - pedidosAnterior) / pedidosAnterior) * 100)
+  const semRevisao = tempos.filter(p => p.rodadasRevisao === 0).length
+  const taxaAprovacao1aRodada = tempos.length > 0
+    ? Math.round((semRevisao / tempos.length) * 100)
     : 0
 
   return NextResponse.json({
     periodo,
-    pedidosCriados: pedidosPeriodo,
-    pedidosConcluidos: entreguesPeriodo,
-    receita: Number(receitaPeriodo._sum.valorCobrado ?? 0),
+    desde: desde.toISOString(),
+    pedidosCriados: totalCriados,
+    pedidosConcluidos: totalConcluidos,
+    receita: receitaTotal,
     taxaConversao,
-    tempoMedioHoras: Math.round(tempoMedioMs / (1000 * 60 * 60)),
-    crescimento,
+    tempoMedioHoras: tempoMedio,
+    taxaAprovacao1aRodada,
+    porStatus: porStatus.map(s => ({ status: s.status, count: s._count })),
   })
 }

@@ -1,7 +1,7 @@
 import { StatusPedidoFoto } from '@prisma/client'
 import { qualificarLead, enviarProposta } from './agents/vendedor'
 import { gerarCobranca, confirmarPagamento } from './agents/cobrador'
-import { gerarImagens } from './agents/produtor'
+import { coletarRequisitos, gerarImagens } from './agents/produtor'
 import { enviarParaAprovacao } from './agents/entregador'
 
 /**
@@ -11,14 +11,15 @@ import { enviarParaAprovacao } from './agents/entregador'
 const PIPELINE_TRANSITIONS: Partial<Record<StatusPedidoFoto, (pedidoId: string) => Promise<void>>> = {
   NOVO_LEAD: (id) => qualificarLead(id),
   EM_QUALIFICACAO: (id) => enviarProposta(id),
-  PROPOSTA_ENVIADA: null as unknown as (id: string) => Promise<void>, // aguarda resposta do lead
+  PROPOSTA_ENVIADA: null as unknown as (id: string) => Promise<void>, // aguarda escolha do pacote via WhatsApp
   FOLLOWUP_1: null as unknown as (id: string) => Promise<void>, // aguarda resposta
   FOLLOWUP_2: null as unknown as (id: string) => Promise<void>, // aguarda resposta
-  AGUARDANDO_PAGAMENTO: (id) => gerarCobranca(id).catch(() => {}), // gera se não tem cobrança ainda
-  PAGAMENTO_CONFIRMADO: (id) => gerarImagens(id),
+  AGUARDANDO_PAGAMENTO: null as unknown as (id: string) => Promise<void>, // aguarda comprovante via WhatsApp
+  PAGAMENTO_CONFIRMADO: (id) => coletarRequisitos(id), // pede tema e foto do cliente
+  COLETANDO_REQUISITOS: null as unknown as (id: string) => Promise<void>, // bot-handler processa respostas
   EM_PRODUCAO: null as unknown as (id: string) => Promise<void>, // aguarda webhook Replicate
-  AGUARDANDO_APROVACAO: (id) => enviarParaAprovacao(id),
-  EM_REVISAO: (id) => gerarImagens(id), // regera imagens
+  AGUARDANDO_APROVACAO: (id) => enviarParaAprovacao(id), // avalia qualidade + envia via WhatsApp
+  EM_REVISAO: (id) => gerarImagens(id), // regera imagens com observações
   ENTREGUE: null as unknown as (id: string) => Promise<void>,
   CANCELADO: null as unknown as (id: string) => Promise<void>,
   PERDIDO: null as unknown as (id: string) => Promise<void>,
