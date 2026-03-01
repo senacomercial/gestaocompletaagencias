@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
     perdidos: 0,
     queueProcessados: 0,
     alertasGerados: 0,
+    reenviosLink: 0,
   }
 
   // 1. Follow-up 1: PROPOSTA_ENVIADA há > 24h
@@ -141,6 +142,59 @@ export async function GET(req: NextRequest) {
     }
   } catch (e) {
     console.error('[Cron] Erro ao verificar pedidos travados:', e)
+  }
+
+  // 6. Timeout 48h: AGUARDANDO_PAGAMENTO sem reenvio → reenviar link (AC:5 Story 8.3)
+  try {
+    const pendentePagamento = await prisma.pedidoFotoIA.findMany({
+      where: {
+        status: StatusPedidoFoto.AGUARDANDO_PAGAMENTO,
+        criadoEm: { lt: subHours(agora, 48) },
+      },
+      select: {
+        id: true,
+        organizacaoId: true,
+        linkPagamento: true,
+        valorCobrado: true,
+        lead: { select: { nome: true, telefone: true } },
+      },
+    })
+
+    for (const pedido of pendentePagamento) {
+      // Evitar reenvio duplicado
+      const jaReenviou = await prisma.execucaoFotoIA.findFirst({
+        where: { pedidoId: pedido.id, etapa: 'reenvio-link-pagamento' },
+      })
+      if (jaReenviou) continue
+
+      // Enviar lembrete via WhatsApp
+      const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001'
+      const valor = pedido.valorCobrado ? Number(pedido.valorCobrado).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ --'
+      const link = pedido.linkPagamento ?? ''
+      const msg = `⏰ Lembrete: Seu pedido FotoIA está aguardando pagamento de ${valor}.\n\nEnvie o comprovante PIX para prosseguirmos.${link ? `\n\n🔗 Link: ${link}` : ''}`
+
+      try {
+        await fetch(`${socketUrl}/wa-send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ organizacaoId: pedido.organizacaoId, telefone: pedido.lead.telefone, corpo: msg }),
+        })
+
+        await prisma.execucaoFotoIA.create({
+          data: {
+            pedidoId: pedido.id,
+            etapa: 'reenvio-link-pagamento',
+            status: 'ok',
+            saida: { msg: 'Lembrete de pagamento reenviado via WhatsApp', geradoEm: agora.toISOString() },
+          },
+        })
+        resultados.reenviosLink++
+      } catch (e) {
+        console.error(`[Cron] Erro reenvio link ${pedido.id}:`, e)
+      }
+    }
+  } catch (e) {
+    console.error('[Cron] Erro timeout 48h:', e)
   }
 
   return NextResponse.json({ ok: true, agora: agora.toISOString(), ...resultados })

@@ -3,6 +3,21 @@ import { qualificarLead, enviarProposta } from './agents/vendedor'
 import { gerarCobranca, confirmarPagamento } from './agents/cobrador'
 import { coletarRequisitos, gerarImagens } from './agents/produtor'
 import { enviarParaAprovacao } from './agents/entregador'
+import { prisma } from '@/lib/prisma'
+
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001'
+
+async function emitirStatusUpdate(organizacaoId: string, pedidoId: string, novoStatus: StatusPedidoFoto) {
+  try {
+    await fetch(`${SOCKET_URL}/emit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ organizacaoId, event: 'pedido:status-update', data: { pedidoId, novoStatus } }),
+    })
+  } catch (_) {
+    // socket server offline — não bloquear pipeline
+  }
+}
 
 /**
  * Mapa de transições automáticas do pipeline FotoIA.
@@ -33,6 +48,14 @@ export async function onStatusChange(
   pedidoId: string,
   novoStatus: StatusPedidoFoto,
 ): Promise<void> {
+  // Emitir evento real-time antes da ação para atualizar dashboard imediatamente
+  try {
+    const pedido = await prisma.pedidoFotoIA.findUnique({ where: { id: pedidoId }, select: { organizacaoId: true } })
+    if (pedido) {
+      await emitirStatusUpdate(pedido.organizacaoId, pedidoId, novoStatus)
+    }
+  } catch (_) {}
+
   const action = PIPELINE_TRANSITIONS[novoStatus]
   if (!action) return // sem ação automática para este status
 

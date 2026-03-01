@@ -68,10 +68,11 @@ async function main() {
   // ─────────────────────────────────────────────────────────────
   // 4. FUNIS & ETAPAS
   // ─────────────────────────────────────────────────────────────
+  // Funil de Vendas
   const funil = await prisma.funil.create({
     data: {
-      nome: 'Funil Principal',
-      descricao: 'Pipeline principal de vendas da agência',
+      nome: 'Funil de Vendas',
+      descricao: 'Pipeline principal de captação e conversão de clientes',
       ordem: 0,
       organizacaoId: org.id,
     },
@@ -85,6 +86,7 @@ async function main() {
     prisma.etapaFunil.create({ data: { nome: 'Venda Realizada', cor: '#22C55E', ordem: 4, isVendaRealizada: true, funilId: funil.id } }),
   ])
 
+  // Funil de Retenção
   const funilRetencao = await prisma.funil.create({
     data: { nome: 'Retenção', descricao: 'Pipeline de up-sell e retenção de clientes ativos', ordem: 1, organizacaoId: org.id },
   })
@@ -93,7 +95,7 @@ async function main() {
     prisma.etapaFunil.create({ data: { nome: 'Up-sell em Negociação', cor: '#D4AF37', ordem: 1, funilId: funilRetencao.id } }),
     prisma.etapaFunil.create({ data: { nome: 'Renovado', cor: '#22C55E', ordem: 2, isVendaRealizada: true, funilId: funilRetencao.id } }),
   ])
-  console.log(`✅ 2 funis criados (${funil.nome} + ${funilRetencao.nome})`)
+  console.log(`✅ Funis (seção 4): ${funil.nome} · ${funilRetencao.nome}`)
 
   // ─────────────────────────────────────────────────────────────
   // 5. LEADS — Pipeline ativo + Convertidos
@@ -596,7 +598,7 @@ async function main() {
   // Funil FotoIA com 11 etapas
   const funilFotoIA = await prisma.funil.create({
     data: {
-      nome: 'FotoIA Pipeline',
+      nome: 'FotoIA — Entrega',
       descricao: 'Pipeline automatizado de vendas e entrega de fotos profissionais por IA',
       ordem: 2,
       organizacaoId: org.id,
@@ -620,7 +622,7 @@ async function main() {
     prisma.etapaFunil.create({ data: { nome: 'Em Revisão', cor: '#F59E0B', ordem: 9, funilId: funilFotoIA.id } }),
     prisma.etapaFunil.create({ data: { nome: 'Entregue', cor: '#22C55E', ordem: 10, isVendaRealizada: true, funilId: funilFotoIA.id } }),
   ])
-  console.log(`✅ Funil FotoIA com 11 etapas criado`)
+  console.log(`✅ Funil ${funilFotoIA.nome} com 11 etapas criado`)
 
   // Squad FotoIA no banco (Squad IA registry)
   const squadFotoIA = await prisma.squad.create({
@@ -731,6 +733,62 @@ async function main() {
   console.log(`✅ Squad FotoIA com 4 agentes e 4 pedidos de exemplo criados`)
 
   // ─────────────────────────────────────────────────────────────
+  // 12. FOTO IA — Configurações padrão (preços, prompts, templates)
+  // ─────────────────────────────────────────────────────────────
+  await prisma.fotoIAConfig.upsert({
+    where: { organizacaoId: org.id },
+    update: {},
+    create: {
+      organizacaoId: org.id,
+      precos: {
+        BASICO:       { preco: 27,  qtdImagens: 5,  revisoes: 1,  ativo: true },
+        PROFISSIONAL: { preco: 47,  qtdImagens: 10, revisoes: 4,  ativo: true },
+        PREMIUM:      { preco: 97,  qtdImagens: 30, revisoes: 10, ativo: true },
+      },
+      prompts: {
+        RETRATO_PROFISSIONAL: {
+          base: 'Professional portrait photo, sharp focus, professional studio lighting, high resolution, business attire, neutral grey background, photorealistic',
+          negativo: 'blurry, low quality, distorted face, cartoon, anime, painting, watermark',
+        },
+        FOTO_PRODUTO: {
+          base: 'Professional product photography, pure white background, studio lighting, sharp details, commercial quality',
+          negativo: 'blurry, shadows, reflections, distracting backgrounds, watermarks',
+        },
+        FOTO_CORPORATIVA: {
+          base: 'Corporate professional photo, modern office environment, formal business attire, confident expression, clean background',
+          negativo: 'casual clothes, unprofessional setting, blurry, dark lighting',
+        },
+        BANNER_REDES_SOCIAIS: {
+          base: 'Professional social media banner, vibrant colors, modern design, marketing aesthetic, high resolution',
+          negativo: 'amateur design, low quality, pixelated, cluttered',
+        },
+        FOTO_PERFIL: {
+          base: 'Professional LinkedIn profile photo, clean light background, natural soft lighting, friendly confident expression, upper body portrait',
+          negativo: 'full body shot, group photo, blurry, dark background, sunglasses',
+        },
+        CUSTOM: {
+          base: 'Professional high-quality photo, sharp details, excellent lighting',
+          negativo: 'blurry, low quality, distorted',
+        },
+      },
+      templates: {
+        saudacao: 'Olá {nome}! 👋\n\nSeja bem-vindo(a) ao *FotoIA* — fotos profissionais por IA! 📸\n\n🥉 *Básico* — R$ 27 → 5 fotos + 1 revisão\n⭐ *Profissional* — R$ 47 → 10 fotos + 4 revisões\n👑 *Premium* — R$ 97 → 30 fotos + 10 revisões\n\nQual pacote você prefere?',
+        cobranca: 'Perfeito, {nome}! 🎉\n\nPacote *{pacote}*:\n✅ {qtdFotos} fotos · {revisoes} revisões · R$ {valor}\n\nPIX {tipoPix}: *{chavePix}*\nBeneficiário: {nomeBeneficiario}\n\nEnvie o comprovante aqui! 📩',
+        coletarTema: 'Pagamento confirmado, {nome}! ✅\n\nQual será o *tema* das suas fotos?\n\nEx: "LinkedIn corporativo", "ao ar livre casual"...',
+        coletarFoto: 'Perfeito! Agora envie *uma foto do seu rosto* 📷\n\nUse boa iluminação e evite filtros. Tema: *{tema}*',
+        emProducao: 'Oi {nome}! 🎨 Suas fotos estão sendo geradas agora!\n\nEm breve você receberá a galeria. Aguarde! ⏳',
+        entrega: '{nome}, suas fotos ficaram incríveis! 🤩\n\nAcesse sua galeria:\n👉 {link}\n_(válido por 7 dias)_',
+        followup1: 'Oi {nome}! 👋 Vi que ainda não escolheu seu pacote de fotos profissionais.\n\nTem alguma dúvida?',
+        followup2: '{nome}, última chance! ⏰ Vagas preenchendo. Garanta agora! 📸',
+      },
+      replicateModel: 'tencentarc/photomaker-style:ddfc2b08d209f9fa8c1eca692712918bd449f695d786de39a1d4f0c4cbed1433',
+      gatewayProvider: 'pix_manual',
+      storageProvider: 'local',
+    },
+  })
+  console.log('✅ FotoIAConfig: preços, prompts e templates padrão criados')
+
+  // ─────────────────────────────────────────────────────────────
   // RESUMO FINAL
   // ─────────────────────────────────────────────────────────────
   console.log('\n🎉 Seed completo finalizado com sucesso!\n')
@@ -744,6 +802,7 @@ async function main() {
   console.log('   • 9 mensagens WhatsApp (1 contato não identificado)')
   console.log('   • 2 squads IA (Conteúdo + FotoIA), 7 agentes, 3 execuções com logs')
   console.log('   • 4 pedidos FotoIA com imagens de exemplo')
+  console.log('   • FotoIAConfig com preços, prompts e templates padrão')
   console.log('\n🔑 Credenciais:')
   console.log('   Admin:       admin@agencia.com / senha123')
   console.log('   Gestor:      gestor@agencia.com / senha123')

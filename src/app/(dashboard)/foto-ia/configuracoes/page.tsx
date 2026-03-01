@@ -518,15 +518,24 @@ function TabTemplates({ config, onSave, saving }: {
 
 // ── Tab Integrações ────────────────────────────────────────────────────────
 
+const GATEWAY_OPTIONS = [
+  { value: 'pix_manual', label: 'PIX Manual (padrão)' },
+  { value: 'asaas', label: 'Asaas' },
+  { value: 'mercadopago', label: 'Mercado Pago' },
+]
+
 function TabIntegracoes({ config, onSave, saving }: {
   config: FotoIAConfig
   onSave: (p: Partial<FotoIAConfig>) => Promise<void>
   saving: boolean
 }) {
   type Status = 'idle' | 'testing' | 'ok' | 'error'
-  const [statuses, setStatuses] = useState<Record<string, Status>>({
-    replicate: 'idle', pix: 'idle', storage: 'idle', whatsapp: 'idle',
-  })
+  const [statuses, setStatuses]         = useState<Record<string, Status>>({ replicate: 'idle', pix: 'idle', storage: 'idle', whatsapp: 'idle' })
+  const [gateway, setGateway]           = useState(config.gatewayProvider ?? 'pix_manual')
+  const [asaasKey, setAsaasKey]         = useState('')
+  const [asaasSecret, setAsaasSecret]   = useState('')
+  const [showKey, setShowKey]           = useState(false)
+  const [showSecret, setShowSecret]     = useState(false)
 
   async function testConnection(key: string) {
     setStatuses(s => ({ ...s, [key]: 'testing' }))
@@ -545,28 +554,24 @@ function TabIntegracoes({ config, onSave, saving }: {
       label: 'Replicate (Geração de Imagens)',
       desc: 'API de geração de fotos com IA (PhotoMaker, SDXL, FLUX)',
       envVar: 'REPLICATE_API_TOKEN',
-      color: 'violet',
     },
     {
       key: 'pix',
-      label: 'PIX Manual',
-      desc: 'Chave PIX da agência para cobrança + validação de comprovante',
-      envVar: 'PIX_CHAVE + ANTHROPIC_API_KEY',
-      color: 'gold',
+      label: gateway === 'pix_manual' ? 'PIX Manual' : gateway === 'asaas' ? 'Asaas' : 'Mercado Pago',
+      desc: gateway === 'pix_manual' ? 'Chave PIX + validação de comprovante via IA' : 'Gateway de pagamento (PIX, boleto, cartão)',
+      envVar: gateway === 'pix_manual' ? 'PIX_CHAVE + ANTHROPIC_API_KEY' : gateway === 'asaas' ? 'ASAAS_API_KEY + ASAAS_WEBHOOK_SECRET' : 'MERCADOPAGO_ACCESS_TOKEN',
     },
     {
       key: 'storage',
       label: 'Storage Local',
       desc: 'Armazenamento das fotos geradas em /public/uploads/',
       envVar: 'LOCAL (sem variável)',
-      color: 'blue',
     },
     {
       key: 'whatsapp',
       label: 'WhatsApp (Baileys)',
       desc: 'Envio de mensagens e imagens ao cliente via WhatsApp',
       envVar: 'Gerenciado pelo Socket.io server',
-      color: 'green',
     },
   ]
 
@@ -578,37 +583,118 @@ function TabIntegracoes({ config, onSave, saving }: {
   }
 
   return (
-    <div className="space-y-3">
-      {INTEGRACOES.map(int => (
-        <div key={int.key} className="card-agency p-4 flex items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <StatusIcon status={statuses[int.key]} />
-            <div>
-              <p className="text-sm font-medium text-foreground">{int.label}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{int.desc}</p>
-              <code className="text-xs text-muted-foreground/70 mt-1 block">{int.envVar}</code>
-            </div>
-          </div>
+    <div className="space-y-4">
+      {/* Gateway de Pagamento */}
+      <div className="card-agency p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Gateway de Pagamento</h3>
           <button
-            onClick={() => testConnection(int.key)}
-            disabled={statuses[int.key] === 'testing'}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-surface-2 hover:bg-surface-1 border border-surface-3 text-muted-foreground hover:text-foreground rounded-lg transition-colors disabled:opacity-50 shrink-0"
+            onClick={() => onSave({ gatewayProvider: gateway })}
+            disabled={saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
           >
-            <RefreshCw size={12} />
-            Testar
+            {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+            Salvar
           </button>
         </div>
-      ))}
 
-      {/* Configurações avançadas */}
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1.5">Provedor ativo</label>
+          <select
+            value={gateway}
+            onChange={e => setGateway(e.target.value)}
+            className="w-full bg-surface-2 border border-surface-3 rounded-lg px-3 py-2 text-sm text-foreground"
+          >
+            {GATEWAY_OPTIONS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+          </select>
+        </div>
+
+        {/* Campos específicos por gateway (mascarados) */}
+        {gateway === 'asaas' && (
+          <div className="space-y-3 pt-1 border-t border-surface-3">
+            <p className="text-xs text-muted-foreground">Configure as variáveis de ambiente no servidor ou informe abaixo:</p>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Asaas API Key</label>
+              <div className="relative">
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={asaasKey}
+                  onChange={e => setAsaasKey(e.target.value)}
+                  placeholder="$aact_..."
+                  className="w-full bg-surface-2 border border-surface-3 rounded-lg px-3 py-2 text-sm text-foreground pr-16"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(v => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground px-2 py-0.5 rounded"
+                >
+                  {showKey ? 'Ocultar' : 'Mostrar'}
+                </button>
+              </div>
+              <code className="text-xs text-muted-foreground/60 mt-0.5 block">env: ASAAS_API_KEY</code>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Webhook Secret</label>
+              <div className="relative">
+                <input
+                  type={showSecret ? 'text' : 'password'}
+                  value={asaasSecret}
+                  onChange={e => setAsaasSecret(e.target.value)}
+                  placeholder="••••••••••••••••"
+                  className="w-full bg-surface-2 border border-surface-3 rounded-lg px-3 py-2 text-sm text-foreground pr-16"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSecret(v => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground px-2 py-0.5 rounded"
+                >
+                  {showSecret ? 'Ocultar' : 'Mostrar'}
+                </button>
+              </div>
+              <code className="text-xs text-muted-foreground/60 mt-0.5 block">env: ASAAS_WEBHOOK_SECRET</code>
+            </div>
+            <p className="text-xs text-amber-400/80">⚠️ Para produção, configure via variáveis de ambiente no servidor.</p>
+          </div>
+        )}
+        {gateway === 'mercadopago' && (
+          <div className="pt-1 border-t border-surface-3">
+            <p className="text-xs text-muted-foreground">Configure <code className="text-muted-foreground/70">MERCADOPAGO_ACCESS_TOKEN</code> e <code className="text-muted-foreground/70">MERCADOPAGO_WEBHOOK_SECRET</code> nas variáveis de ambiente do servidor.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Status das integrações */}
+      <div className="space-y-2">
+        {INTEGRACOES.map(int => (
+          <div key={int.key} className="card-agency p-4 flex items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <StatusIcon status={statuses[int.key]} />
+              <div>
+                <p className="text-sm font-medium text-foreground">{int.label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{int.desc}</p>
+                <code className="text-xs text-muted-foreground/70 mt-1 block">{int.envVar}</code>
+              </div>
+            </div>
+            <button
+              onClick={() => testConnection(int.key)}
+              disabled={statuses[int.key] === 'testing'}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-surface-2 hover:bg-surface-1 border border-surface-3 text-muted-foreground hover:text-foreground rounded-lg transition-colors disabled:opacity-50 shrink-0"
+            >
+              <RefreshCw size={12} />
+              Testar
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Limites de geração */}
       <div className="card-agency p-4 space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Limites de Geração</h3>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Gerações simultâneas</label>
             <input
-              type="number" min={1} max={10}
-              defaultValue={3}
+              type="number" min={1} max={10} defaultValue={3}
               className="w-full bg-surface-2 border border-surface-3 rounded px-3 py-1.5 text-foreground text-sm"
               onChange={e => onSave({ maxSimultaneos: Number(e.target.value) } as Partial<FotoIAConfig>)}
             />
@@ -616,8 +702,7 @@ function TabIntegracoes({ config, onSave, saving }: {
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Tentativas máximas</label>
             <input
-              type="number" min={1} max={5}
-              defaultValue={3}
+              type="number" min={1} max={5} defaultValue={3}
               className="w-full bg-surface-2 border border-surface-3 rounded px-3 py-1.5 text-foreground text-sm"
               onChange={e => onSave({ maxTentativas: Number(e.target.value) } as Partial<FotoIAConfig>)}
             />

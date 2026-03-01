@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
   Camera, TrendingUp, Clock, CheckCircle2, DollarSign,
   Sparkles, ArrowRight, AlertCircle, Package, Loader2,
+  BarChart2, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react'
+import { useSocket } from '@/hooks/useSocket'
 
 interface DashboardData {
   totalLeads: number
@@ -22,6 +24,14 @@ interface DashboardData {
     criadoEm: string
     lead: { nome: string; empresa: string | null }
   }>
+}
+
+interface RelatorioData {
+  pedidosCriados: number
+  pedidosConcluidos: number
+  receita: number
+  taxaConversao: number
+  tempoMedioHoras: number
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -89,15 +99,33 @@ function KpiCard({
 }
 
 export default function FotoIADashboard() {
-  const [data, setData] = useState<DashboardData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData]         = useState<DashboardData | null>(null)
+  const [loading, setLoading]   = useState(true)
+  const [relatorio, setRelatorio] = useState<RelatorioData | null>(null)
+  const { on }                  = useSocket()
 
-  useEffect(() => {
+  const fetchDashboard = useCallback(() => {
     fetch('/api/foto-ia/dashboard')
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    fetchDashboard()
+    fetch('/api/foto-ia/relatorio?periodo=semana')
+      .then(r => r.json())
+      .then(d => setRelatorio(d))
+      .catch(() => {})
+  }, [fetchDashboard])
+
+  // Real-time: atualizar dashboard quando status de pedido mudar
+  useEffect(() => {
+    const unsub = on('pedido:status-update', () => {
+      fetchDashboard()
+    })
+    return unsub
+  }, [on, fetchDashboard])
 
   if (loading) {
     return (
@@ -274,6 +302,48 @@ export default function FotoIADashboard() {
           </div>
         </div>
       </div>
+
+      {/* Relatório da Semana */}
+      {relatorio && (
+        <div className="card-agency p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart2 size={16} className="text-gold-400" />
+            <h2 className="font-semibold text-foreground">Relatório da Semana</h2>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-foreground">{relatorio.pedidosCriados}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Pedidos criados</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-400">{relatorio.pedidosConcluidos}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Concluídos</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gold-400">
+                {relatorio.receita.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 })}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Receita</p>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1">
+                <p className="text-2xl font-bold text-foreground">{relatorio.taxaConversao}%</p>
+                {relatorio.taxaConversao >= 30
+                  ? <ArrowUpRight size={16} className="text-green-400" />
+                  : <ArrowDownRight size={16} className="text-red-400" />
+                }
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">Conversão</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-foreground">
+                {relatorio.tempoMedioHoras > 0 ? `${relatorio.tempoMedioHoras}h` : '—'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Tempo médio</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

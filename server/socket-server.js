@@ -14,7 +14,7 @@
 
 const { createServer } = require('http')
 const { Server } = require('socket.io')
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, Browsers, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys')
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, Browsers, fetchLatestBaileysVersion, downloadMediaMessage } = require('@whiskeysockets/baileys')
 const { Boom } = require('@hapi/boom')
 const pino = require('pino')
 const path = require('path')
@@ -36,10 +36,30 @@ if (!fs.existsSync(AUTH_DIR)) {
 const logger = pino({ level: 'info' })
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Lê o body de uma requisição HTTP como JSON.
+ * @param {import('http').IncomingMessage} req
+ * @returns {Promise<any>}
+ */
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = ''
+    req.on('data', chunk => { data += chunk })
+    req.on('end', () => {
+      try { resolve(JSON.parse(data || '{}')) } catch (e) { reject(e) }
+    })
+    req.on('error', reject)
+  })
+}
+
+// =============================================================================
 // HTTP + Socket.io
 // =============================================================================
 
-const httpServer = createServer((req, res) => {
+const httpServer = createServer(async (req, res) => {
   // Health check
   if (req.url === '/health' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -68,6 +88,70 @@ const httpServer = createServer((req, res) => {
     } else {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
       res.end(`<!DOCTYPE html><html><body style="background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;"><p>QR Code não disponível. Clique em "Conectar WhatsApp" no app primeiro.</p></body></html>`)
+    }
+    return
+  }
+
+  // POST /wa-send — envia texto via WhatsApp (usado por wa-sender.ts)
+  if (req.url === '/wa-send' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const { organizacaoId, telefone, corpo } = body
+      const sock = waConnections.get(organizacaoId)
+      if (!sock) {
+        res.writeHead(503, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'WhatsApp não conectado' }))
+        return
+      }
+      const jid = `${telefone}@s.whatsapp.net`
+      await sock.sendMessage(jid, { text: corpo })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true }))
+    } catch (err) {
+      logger.error({ err }, 'Erro em POST /wa-send')
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: String(err) }))
+    }
+    return
+  }
+
+  // POST /wa-send-image — envia imagem via WhatsApp (usado por wa-sender.ts)
+  if (req.url === '/wa-send-image' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const { organizacaoId, telefone, imagemUrl, caption } = body
+      const sock = waConnections.get(organizacaoId)
+      if (!sock) {
+        res.writeHead(503, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'WhatsApp não conectado' }))
+        return
+      }
+      const jid = `${telefone}@s.whatsapp.net`
+      await sock.sendMessage(jid, { image: { url: imagemUrl }, caption: caption || '' })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true }))
+    } catch (err) {
+      logger.error({ err }, 'Erro em POST /wa-send-image')
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: String(err) }))
+    }
+    return
+  }
+
+  // POST /emit — emite evento Socket.io para uma org (uso interno por API routes Next.js)
+  if (req.url === '/emit' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const { organizacaoId, event, data } = body
+      if (organizacaoId && event) {
+        io.to(`org:${organizacaoId}`).emit(event, data)
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true }))
+    } catch (err) {
+      logger.error({ err }, 'Erro em POST /emit')
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: String(err) }))
     }
     return
   }
@@ -139,7 +223,19 @@ async function connectWhatsApp(organizacaoId) {
   }
 
   const { state, saveCreds } = await useMultiFileAuthState(authPath)
-  const { version } = await fetchLatestBaileysVersion()
+
+  // Busca versão mais recente com fallback (evita travar se não tiver internet/timeout)
+  let version
+  try {
+    const result = await Promise.race([
+      fetchLatestBaileysVersion(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+    ])
+    version = result.version
+  } catch {
+    version = [2, 3000, 1015534] // versão estável conhecida como fallback
+    logger.warn({ organizacaoId }, 'fetchLatestBaileysVersion timeout — usando versão fallback')
+  }
 
   logger.info({ organizacaoId, version }, 'Iniciando conexão WhatsApp')
 
@@ -239,14 +335,58 @@ async function connectWhatsApp(organizacaoId) {
 
       const telefone = msg.key.remoteJid?.replace('@s.whatsapp.net', '') || ''
       const corpo = extractMessageText(msg)
+      const isImagem = !!(msg.message.imageMessage)
 
-      if (!corpo || !telefone) continue
+      if (!corpo && !isImagem) continue
+      if (!telefone) continue
 
-      logger.info({ organizacaoId, telefone }, 'Mensagem recebida')
+      logger.info({ organizacaoId, telefone, isImagem }, 'Mensagem recebida')
 
-      // Persistir via API interna
+      // Persistir via API interna (somente mensagens de texto)
+      if (corpo) {
+        try {
+          await fetch(`${APP_URL}/api/mensagens`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-internal-token': process.env.AIOS_API_KEY || '',
+            },
+            body: JSON.stringify({
+              organizacaoId,
+              telefoneContato: telefone,
+              corpo,
+              fromMe: false,
+              whatsappId: msg.key.id,
+              timestamp: new Date(Number(msg.messageTimestamp) * 1000),
+            }),
+          })
+        } catch (err) {
+          logger.error({ err, organizacaoId }, 'Erro ao persistir mensagem')
+        }
+      }
+
+      // Emite evento para frontend
+      io.to(`org:${organizacaoId}`).emit('wa:message', {
+        telefoneContato: telefone,
+        corpo: corpo || '[imagem]',
+        fromMe: false,
+        timestamp: new Date(Number(msg.messageTimestamp) * 1000),
+        whatsappId: msg.key.id,
+        organizacaoId,
+      })
+
+      // FotoIA Bot — rotear mensagens para o bot handler
       try {
-        await fetch(`${APP_URL}/api/mensagens`, {
+        let imagemBase64 = null
+        let mimeType = null
+
+        if (isImagem) {
+          const buffer = await downloadMediaMessage(msg, 'buffer', {})
+          imagemBase64 = buffer.toString('base64')
+          mimeType = msg.message.imageMessage.mimetype || 'image/jpeg'
+        }
+
+        await fetch(`${APP_URL}/api/foto-ia/bot`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -254,26 +394,15 @@ async function connectWhatsApp(organizacaoId) {
           },
           body: JSON.stringify({
             organizacaoId,
-            telefoneContato: telefone,
-            corpo,
-            fromMe: false,
-            whatsappId: msg.key.id,
-            timestamp: new Date(Number(msg.messageTimestamp) * 1000),
+            telefone,
+            corpo: corpo || null,
+            imagemBase64,
+            mimeType,
           }),
         })
       } catch (err) {
-        logger.error({ err, organizacaoId }, 'Erro ao persistir mensagem')
+        logger.error({ err, organizacaoId }, 'Erro ao chamar bot FotoIA')
       }
-
-      // Emite evento para frontend
-      io.to(`org:${organizacaoId}`).emit('wa:message', {
-        telefoneContato: telefone,
-        corpo,
-        fromMe: false,
-        timestamp: new Date(Number(msg.messageTimestamp) * 1000),
-        whatsappId: msg.key.id,
-        organizacaoId,
-      })
     }
   })
 }
@@ -397,6 +526,21 @@ io.on('connection', (socket) => {
 httpServer.listen(PORT, () => {
   logger.info(`Socket.io server rodando na porta ${PORT}`)
   logger.info(`CORS habilitado para: ${APP_URL}`)
+
+  // Auto-reconectar orgs que têm credenciais salvas (retoma sessão sem novo QR)
+  if (fs.existsSync(AUTH_DIR)) {
+    const orgs = fs.readdirSync(AUTH_DIR).filter(d =>
+      fs.statSync(path.join(AUTH_DIR, d)).isDirectory()
+    )
+    if (orgs.length > 0) {
+      logger.info({ orgs }, `Auto-reconectando ${orgs.length} sessão(ões) WhatsApp salva(s)...`)
+      for (const orgId of orgs) {
+        connectWhatsApp(orgId).catch(err =>
+          logger.warn({ orgId, err: err.message }, 'Falha no auto-reconect')
+        )
+      }
+    }
+  }
 })
 
 // Graceful shutdown
