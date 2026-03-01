@@ -91,6 +91,7 @@ enum StatusPedidoFoto {
   FOLLOWUP_2
   AGUARDANDO_PAGAMENTO
   PAGAMENTO_CONFIRMADO
+  COLETANDO_REQUISITOS
   EM_PRODUCAO
   AGUARDANDO_APROVACAO
   EM_REVISAO
@@ -575,9 +576,13 @@ model PedidoFotoIA {
   predictionId        String?           // ID da prediction no Replicate
   tentativasGeracao   Int               @default(0)
   rodadasRevisao      Int               @default(0)
+  revisoesMaximas     Int               @default(1)  // máximo de revisões pelo pacote contratado
+  pacote              String?           // BASICO | PROFISSIONAL | PREMIUM
+  temaFoto            String?           @db.Text   // tema/contexto das fotos (natal, viagem, etc.)
+  fotoClienteUrl      String?           // URL da foto de rosto enviada pelo cliente
   promptUsado         String?           @db.Text   // prompt da IA que gerou
   observacoes         String?           @db.Text
-  tokenGaleria        String?           @unique    // token JWT para acesso à galeria pública
+  tokenGaleria        String?           @unique    // mantido por compatibilidade
   aprovadoEm          DateTime?
   entregueEm          DateTime?
   criadoEm            DateTime          @default(now())
@@ -646,8 +651,12 @@ model FotoIAConfig {
   templates        Json     @default("{}")
   // Configurações de integração
   replicateModel   String   @default("stability-ai/sdxl:39ed52f2319f9bf9f645aca573a99de73eb0b239b0d6f71022b56c8e617ee7c1")
-  gatewayProvider  String   @default("asaas")
+  gatewayProvider  String   @default("pix_manual")
   storageProvider  String   @default("local")
+  // Chave PIX para cobrança manual
+  pixChave         String   @default("")
+  pixTipo          String   @default("cnpj") // cnpj | cpf | email | telefone | aleatoria
+  pixNome          String   @default("")
   // Limites operacionais
   maxSimultaneos   Int      @default(3)
   maxTentativas    Int      @default(3)

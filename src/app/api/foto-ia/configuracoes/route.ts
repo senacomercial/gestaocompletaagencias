@@ -47,7 +47,8 @@ export async function PUT(req: NextRequest) {
 
   const body = await req.json()
   const { precos, prompts, templates, replicateModel, gatewayProvider, storageProvider,
-    maxSimultaneos, maxTentativas, timeoutFollowup, timeoutPerdido } = body
+    maxSimultaneos, maxTentativas, timeoutFollowup, timeoutPerdido,
+    pixChave, pixTipo, pixNome } = body
 
   const config = await prisma.fotoIAConfig.upsert({
     where: { organizacaoId: session.user.organizacaoId },
@@ -63,6 +64,9 @@ export async function PUT(req: NextRequest) {
       ...(maxTentativas !== undefined && { maxTentativas }),
       ...(timeoutFollowup !== undefined && { timeoutFollowup }),
       ...(timeoutPerdido !== undefined && { timeoutPerdido }),
+      ...(pixChave !== undefined && { pixChave }),
+      ...(pixTipo !== undefined && { pixTipo }),
+      ...(pixNome !== undefined && { pixNome }),
     },
     update: {
       ...(precos !== undefined && { precos }),
@@ -75,6 +79,9 @@ export async function PUT(req: NextRequest) {
       ...(maxTentativas !== undefined && { maxTentativas }),
       ...(timeoutFollowup !== undefined && { timeoutFollowup }),
       ...(timeoutPerdido !== undefined && { timeoutPerdido }),
+      ...(pixChave !== undefined && { pixChave }),
+      ...(pixTipo !== undefined && { pixTipo }),
+      ...(pixNome !== undefined && { pixNome }),
     },
   })
 

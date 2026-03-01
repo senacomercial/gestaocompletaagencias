@@ -22,6 +22,9 @@ interface FotoIAConfig {
   replicateModel?: string
   gatewayProvider?: string
   storageProvider?: string
+  pixChave?: string
+  pixTipo?: string
+  pixNome?: string
 }
 
 type TabKey = 'precos' | 'prompts' | 'templates' | 'integracoes'
@@ -524,6 +527,14 @@ const GATEWAY_OPTIONS = [
   { value: 'mercadopago', label: 'Mercado Pago' },
 ]
 
+const PIX_TIPO_OPTIONS = [
+  { value: 'cnpj',      label: 'CNPJ' },
+  { value: 'cpf',       label: 'CPF' },
+  { value: 'email',     label: 'E-mail' },
+  { value: 'telefone',  label: 'Telefone' },
+  { value: 'aleatoria', label: 'Chave Aleatória' },
+]
+
 function TabIntegracoes({ config, onSave, saving }: {
   config: FotoIAConfig
   onSave: (p: Partial<FotoIAConfig>) => Promise<void>
@@ -532,6 +543,9 @@ function TabIntegracoes({ config, onSave, saving }: {
   type Status = 'idle' | 'testing' | 'ok' | 'error'
   const [statuses, setStatuses]         = useState<Record<string, Status>>({ replicate: 'idle', pix: 'idle', storage: 'idle', whatsapp: 'idle' })
   const [gateway, setGateway]           = useState(config.gatewayProvider ?? 'pix_manual')
+  const [pixChave, setPixChave]         = useState(config.pixChave ?? '')
+  const [pixTipo, setPixTipo]           = useState(config.pixTipo ?? 'cnpj')
+  const [pixNome, setPixNome]           = useState(config.pixNome ?? '')
   const [asaasKey, setAsaasKey]         = useState('')
   const [asaasSecret, setAsaasSecret]   = useState('')
   const [showKey, setShowKey]           = useState(false)
@@ -559,7 +573,9 @@ function TabIntegracoes({ config, onSave, saving }: {
       key: 'pix',
       label: gateway === 'pix_manual' ? 'PIX Manual' : gateway === 'asaas' ? 'Asaas' : 'Mercado Pago',
       desc: gateway === 'pix_manual' ? 'Chave PIX + validação de comprovante via IA' : 'Gateway de pagamento (PIX, boleto, cartão)',
-      envVar: gateway === 'pix_manual' ? 'PIX_CHAVE + ANTHROPIC_API_KEY' : gateway === 'asaas' ? 'ASAAS_API_KEY + ASAAS_WEBHOOK_SECRET' : 'MERCADOPAGO_ACCESS_TOKEN',
+      envVar: gateway === 'pix_manual'
+        ? (pixChave ? `Chave ${PIX_TIPO_OPTIONS.find(o => o.value === pixTipo)?.label ?? pixTipo}: ${pixChave}` : 'Não configurado — configure acima')
+        : gateway === 'asaas' ? 'ASAAS_API_KEY + ASAAS_WEBHOOK_SECRET' : 'MERCADOPAGO_ACCESS_TOKEN',
     },
     {
       key: 'storage',
@@ -589,7 +605,7 @@ function TabIntegracoes({ config, onSave, saving }: {
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-foreground">Gateway de Pagamento</h3>
           <button
-            onClick={() => onSave({ gatewayProvider: gateway })}
+            onClick={() => onSave({ gatewayProvider: gateway, pixChave, pixTipo, pixNome })}
             disabled={saving}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
           >
@@ -609,7 +625,45 @@ function TabIntegracoes({ config, onSave, saving }: {
           </select>
         </div>
 
-        {/* Campos específicos por gateway (mascarados) */}
+        {/* Campos específicos por gateway */}
+        {gateway === 'pix_manual' && (
+          <div className="space-y-3 pt-1 border-t border-surface-3">
+            <p className="text-xs text-muted-foreground">Configure sua chave PIX para recebimento manual:</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Tipo da Chave</label>
+                <select
+                  value={pixTipo}
+                  onChange={e => setPixTipo(e.target.value)}
+                  className="w-full bg-surface-2 border border-surface-3 rounded-lg px-3 py-2 text-sm text-foreground"
+                >
+                  {PIX_TIPO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs text-muted-foreground block mb-1">Chave PIX</label>
+                <input
+                  type="text"
+                  value={pixChave}
+                  onChange={e => setPixChave(e.target.value)}
+                  placeholder={pixTipo === 'cnpj' ? '00.000.000/0001-00' : pixTipo === 'cpf' ? '000.000.000-00' : pixTipo === 'email' ? 'empresa@email.com' : pixTipo === 'telefone' ? '+5511999999999' : 'chave aleatória'}
+                  className="w-full bg-surface-2 border border-surface-3 rounded-lg px-3 py-2 text-sm text-foreground"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Nome do Beneficiário</label>
+              <input
+                type="text"
+                value={pixNome}
+                onChange={e => setPixNome(e.target.value)}
+                placeholder="Nome que aparece para o cliente ao pagar"
+                className="w-full bg-surface-2 border border-surface-3 rounded-lg px-3 py-2 text-sm text-foreground"
+              />
+              <p className="text-xs text-muted-foreground/70 mt-1">Este nome é exibido na mensagem de cobrança enviada ao cliente via WhatsApp.</p>
+            </div>
+          </div>
+        )}
         {gateway === 'asaas' && (
           <div className="space-y-3 pt-1 border-t border-surface-3">
             <p className="text-xs text-muted-foreground">Configure as variáveis de ambiente no servidor ou informe abaixo:</p>

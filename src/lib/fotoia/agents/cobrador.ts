@@ -5,6 +5,17 @@ import { getPixConfig } from '@/lib/fotoia/payment/pix-manual'
 import { validarComprovanteComIA } from '@/lib/fotoia/payment/pix-manual'
 import { onStatusChange } from '@/lib/fotoia/pipeline-orchestrator'
 
+async function getPixConfigForOrg(organizacaoId: string) {
+  const dbConfig = await prisma.fotoIAConfig.findUnique({
+    where: { organizacaoId },
+    select: { pixChave: true, pixTipo: true, pixNome: true },
+  })
+  if (dbConfig?.pixChave) {
+    return { chave: dbConfig.pixChave, tipo: dbConfig.pixTipo || 'cnpj', nome: dbConfig.pixNome || '' }
+  }
+  return getPixConfig()
+}
+
 const PACOTE_LABELS: Record<string, { label: string; qtd: number; revisoes: number }> = {
   BASICO:       { label: 'Básico',           qtd: 5,  revisoes: 1 },
   PROFISSIONAL: { label: 'Profissional ⭐',  qtd: 10, revisoes: 4 },
@@ -24,8 +35,8 @@ export async function gerarCobranca(pedidoId: string): Promise<void> {
 
   if (pedido.cobrancaId && pedido.status === StatusPedidoFoto.AGUARDANDO_PAGAMENTO) return
 
-  const pix = getPixConfig()
-  if (!pix) throw new Error('PIX_CHAVE não configurada no .env')
+  const pix = await getPixConfigForOrg(pedido.organizacaoId)
+  if (!pix) throw new Error('Chave PIX não configurada. Configure em Configurações → Integrações.')
 
   const nome = pedido.lead.nome.split(' ')[0]
   const telefone = pedido.lead.telefone
@@ -92,7 +103,7 @@ export async function processarComprovante(
   })
   if (!pedido) return
 
-  const pix = getPixConfig()
+  const pix = await getPixConfigForOrg(organizacaoId)
   if (!pix) return
 
   await enviarTexto(organizacaoId, telefone, '🔍 Analisando seu comprovante... Um momento!')
