@@ -1,0 +1,7 @@
+# Ignorar Dockerfile do Next.js
+Dockerfile
+
+# Ignorar Dockerfile do Next.js (deploy)
+Dockerfile.nextjs
+
+# Deploy do Socket Server deve usar server/Dockerfile

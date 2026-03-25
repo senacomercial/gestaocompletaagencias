@@ -1,0 +1,29 @@
+# =============================================================================
+# .dockerignore - Arquivos/ Diretórios ignorados no build Docker
+# =============================================================================
+
+node_modules
+.next
+.git
+.gitignore
+README.md
+DEPLOY.md
+.env
+.env.local
+.env.*.local
+docker-compose*.yml
+Dockerfile*
+nginx.conf
+.vscode
+.idea
+*.log
+postgres-installer.exe
+*.ps1
+*.sql
+.claude
+.aios-core
+.squad
+.baileys-auth
+public/uploads
+coverage
+.nyc_output

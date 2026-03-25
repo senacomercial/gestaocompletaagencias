@@ -1,0 +1,18 @@
+{
+  "name": "gestao-agencias-socket-server",
+  "version": "1.0.0",
+  "description": "Socket.io Server para Gestão de Agências",
+  "main": "server/socket-server.js",
+  "scripts": {
+    "start": "node server/socket-server.js"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "pino": "^9.0.0",
+    "socket.io": "^4.7.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
