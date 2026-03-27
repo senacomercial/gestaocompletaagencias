@@ -10,7 +10,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{id: string}> },
 ) {
-  const { const { id } = params } = await params
+  const { id } = await params
 
   // Aceitar autenticação via sessão ou token temporário
   const token = req.nextUrl.searchParams.get('token')

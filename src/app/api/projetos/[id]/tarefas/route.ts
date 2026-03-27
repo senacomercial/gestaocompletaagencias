@@ -6,8 +6,9 @@ import { createTarefaSchema, aplicarPresetSchema } from '@/lib/validators/projet
 export async function POST(req: NextRequest, { params }: { params: Promise<{id: string}> }) {
   const session = await requireAuth()
   const organizacaoId = session.user.organizacaoId
+  const { id } = await params
 
-  const projeto = await prisma.projeto.findFirst({ where: { id: (await params).id, organizacaoId } })
+  const projeto = await prisma.projeto.findFirst({ where: { id, organizacaoId } })
   if (!projeto) return NextResponse.json({ error: 'Projeto não encontrado' }, { status: 404 })
 
   let body: unknown
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{id: 
         titulo: t.titulo,
         descricao: t.descricao ?? null,
         ordem: t.ordemPadrao + i,
-        projetoId: (await params).id,
+        projetoId: id,
         organizacaoId,
       })),
     })
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{id: 
       sprintId: parsed.data.sprintId ?? null,
       responsavelId: parsed.data.responsavelId ?? null,
       ordem: parsed.data.ordem,
-      projetoId: (await params).id,
+      projetoId: id,
       organizacaoId,
     },
     include: { responsavel: { select: { id: true, nome: true } } },
