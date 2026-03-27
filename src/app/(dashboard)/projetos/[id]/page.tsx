@@ -67,8 +67,7 @@ interface NewTarefaForm {
   sprintId: string
 }
 
-export default function ProjetoDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params
+function ProjetoDetailPage({ id }: { id: string }) {
   const [tarefaAbertas, setTarefaAberta] = useState<string | null>(null)
   const [novaForm, setNovaForm] = useState<NewTarefaForm | null>(null)
   const [salvando, setSalvando] = useState(false)
@@ -338,4 +337,10 @@ function TarefaGroup({
       )}
     </div>
   )
+}
+
+// Server Component wrapper para lidar com params Promise no Next.js 15
+export default async function ProjetoPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  return <ProjetoDetailPage id={id} />
 }
