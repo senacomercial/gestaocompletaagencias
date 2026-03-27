@@ -4,10 +4,10 @@ import { requireAuth } from '@/lib/auth'
 import { updateFunilSchema } from '@/lib/validators/funil'
 import { getFunilComEtapas, updateFunil, deleteFunil } from '@/lib/services/funis'
 
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{id: string}> }) {
   try {
     const session = await requireAuth()
-    const funil = await getFunilComEtapas(params.id, session.user.organizacaoId)
+    const funil = await getFunilComEtapas((await params).id, session.user.organizacaoId)
     if (!funil) return NextResponse.json({ error: 'Funil não encontrado' }, { status: 404 })
     return NextResponse.json(funil)
   } catch (error) {
@@ -16,12 +16,12 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{id: string}> }) {
   try {
     const session = await requireAuth()
     const body = await request.json()
     const data = updateFunilSchema.parse(body)
-    const funil = await updateFunil(params.id, data, session.user.organizacaoId)
+    const funil = await updateFunil((await params).id, data, session.user.organizacaoId)
     return NextResponse.json(funil)
   } catch (error) {
     if (error instanceof ZodError) return NextResponse.json({ error: error.errors }, { status: 422 })
@@ -30,10 +30,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{id: string}> }) {
   try {
     const session = await requireAuth()
-    await deleteFunil(params.id, session.user.organizacaoId)
+    await deleteFunil((await params).id, session.user.organizacaoId)
     return new NextResponse(null, { status: 204 })
   } catch (error) {
     if (error instanceof Error && error.message.includes('NEXT_REDIRECT')) throw error

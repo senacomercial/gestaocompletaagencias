@@ -4,10 +4,10 @@ import { prisma } from '@/lib/prisma'
 // GET /api/foto-ia/pix/[id] — retorna dados PIX do pedido (sem auth, usado no link enviado ao cliente)
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{id: string}> },
 ) {
   const pedido = await prisma.pedidoFotoIA.findFirst({
-    where: { cobrancaId: params.id },
+    where: { cobrancaId: (await params).id },
     select: {
       id: true,
       status: true,

@@ -9,7 +9,7 @@ const updateSquadSchema = z.object({
   ativo: z.boolean().optional(),
 })
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{id: string}> }) {
   const session = await requireAuth()
   const organizacaoId = session.user.organizacaoId
 
@@ -19,17 +19,17 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const parsed = updateSquadSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
 
-  const updated = await prisma.squad.updateMany({ where: { id: params.id, organizacaoId }, data: parsed.data })
+  const updated = await prisma.squad.updateMany({ where: { id: (await params).id, organizacaoId }, data: parsed.data })
   if (updated.count === 0) return NextResponse.json({ error: 'Squad não encontrado' }, { status: 404 })
   return NextResponse.json({ success: true })
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{id: string}> }) {
   const session = await requireAuth()
   const organizacaoId = session.user.organizacaoId
 
-  const squad = await prisma.squad.findFirst({ where: { id: params.id, organizacaoId } })
+  const squad = await prisma.squad.findFirst({ where: { id: (await params).id, organizacaoId } })
   if (!squad) return NextResponse.json({ error: 'Squad não encontrado' }, { status: 404 })
-  await prisma.squad.delete({ where: { id: params.id } })
+  await prisma.squad.delete({ where: { id: (await params).id } })
   return NextResponse.json({ success: true })
 }

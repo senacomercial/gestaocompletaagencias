@@ -4,12 +4,12 @@ import { requireAuth } from '@/lib/auth'
 import { reordenarEtapasSchema } from '@/lib/validators/funil'
 import { reordenarEtapas } from '@/lib/services/funis'
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{id: string}> }) {
   try {
     const session = await requireAuth()
     const body = await request.json()
     const { etapaIds } = reordenarEtapasSchema.parse(body)
-    await reordenarEtapas(params.id, etapaIds, session.user.organizacaoId)
+    await reordenarEtapas((await params).id, etapaIds, session.user.organizacaoId)
     return NextResponse.json({ ok: true })
   } catch (error) {
     if (error instanceof ZodError) return NextResponse.json({ error: error.errors }, { status: 422 })

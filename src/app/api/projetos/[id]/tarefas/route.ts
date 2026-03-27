@@ -3,11 +3,11 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { createTarefaSchema, aplicarPresetSchema } from '@/lib/validators/projeto'
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{id: string}> }) {
   const session = await requireAuth()
   const organizacaoId = session.user.organizacaoId
 
-  const projeto = await prisma.projeto.findFirst({ where: { id: params.id, organizacaoId } })
+  const projeto = await prisma.projeto.findFirst({ where: { id: (await params).id, organizacaoId } })
   if (!projeto) return NextResponse.json({ error: 'Projeto não encontrado' }, { status: 404 })
 
   let body: unknown
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         titulo: t.titulo,
         descricao: t.descricao ?? null,
         ordem: t.ordemPadrao + i,
-        projetoId: params.id,
+        projetoId: (await params).id,
         organizacaoId,
       })),
     })
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       sprintId: parsed.data.sprintId ?? null,
       responsavelId: parsed.data.responsavelId ?? null,
       ordem: parsed.data.ordem,
-      projetoId: params.id,
+      projetoId: (await params).id,
       organizacaoId,
     },
     include: { responsavel: { select: { id: true, nome: true } } },

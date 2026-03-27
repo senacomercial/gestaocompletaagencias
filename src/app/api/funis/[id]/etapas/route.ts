@@ -4,10 +4,10 @@ import { requireAuth } from '@/lib/auth'
 import { createEtapaSchema } from '@/lib/validators/funil'
 import { getFunilComEtapas, createEtapa } from '@/lib/services/funis'
 
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{id: string}> }) {
   try {
     const session = await requireAuth()
-    const funil = await getFunilComEtapas(params.id, session.user.organizacaoId)
+    const funil = await getFunilComEtapas((await params).id, session.user.organizacaoId)
     if (!funil) return NextResponse.json({ error: 'Funil não encontrado' }, { status: 404 })
     return NextResponse.json(funil.etapas)
   } catch (error) {
@@ -16,12 +16,12 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{id: string}> }) {
   try {
     const session = await requireAuth()
     const body = await request.json()
     const data = createEtapaSchema.parse(body)
-    const etapa = await createEtapa(params.id, data, session.user.organizacaoId)
+    const etapa = await createEtapa((await params).id, data, session.user.organizacaoId)
     return NextResponse.json(etapa, { status: 201 })
   } catch (error) {
     if (error instanceof ZodError) return NextResponse.json({ error: error.errors }, { status: 422 })

@@ -3,11 +3,11 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { createSprintSchema } from '@/lib/validators/projeto'
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{id: string}> }) {
   const session = await requireAuth()
   const organizacaoId = session.user.organizacaoId
 
-  const projeto = await prisma.projeto.findFirst({ where: { id: params.id, organizacaoId } })
+  const projeto = await prisma.projeto.findFirst({ where: { id: (await params).id, organizacaoId } })
   if (!projeto) return NextResponse.json({ error: 'Projeto não encontrado' }, { status: 404 })
 
   let body: unknown
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       nome: parsed.data.nome,
       dataInicio: new Date(parsed.data.dataInicio),
       dataFim: new Date(parsed.data.dataFim),
-      projetoId: params.id,
+      projetoId: (await params).id,
       organizacaoId,
     },
   })

@@ -8,9 +8,9 @@ import jwt from 'jsonwebtoken'
 // GET /api/foto-ia/imagens/[id] — serve imagem com autenticação
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{id: string}> },
 ) {
-  const { id } = params
+  const { const { id } = params } = await params
 
   // Aceitar autenticação via sessão ou token temporário
   const token = req.nextUrl.searchParams.get('token')

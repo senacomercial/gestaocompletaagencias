@@ -6,13 +6,13 @@ import { prisma } from '@/lib/prisma'
 // GET /api/foto-ia/pedidos/[id]
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{id: string}> },
 ) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const pedido = await prisma.pedidoFotoIA.findFirst({
-    where: { id: params.id, organizacaoId: session.user.organizacaoId },
+    where: { id: (await params).id, organizacaoId: session.user.organizacaoId },
     include: {
       lead: { select: { id: true, nome: true, telefone: true, empresa: true, email: true } },
       imagens: { orderBy: [{ rodada: 'asc' }, { criadoEm: 'asc' }] },
@@ -27,7 +27,7 @@ export async function GET(
 // PATCH /api/foto-ia/pedidos/[id] — atualização manual de status
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{id: string}> },
 ) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -36,12 +36,12 @@ export async function PATCH(
   const { status, observacoes } = body
 
   const pedido = await prisma.pedidoFotoIA.findFirst({
-    where: { id: params.id, organizacaoId: session.user.organizacaoId },
+    where: { id: (await params).id, organizacaoId: session.user.organizacaoId },
   })
   if (!pedido) return NextResponse.json({ error: 'Pedido não encontrado' }, { status: 404 })
 
   const updated = await prisma.pedidoFotoIA.update({
-    where: { id: params.id },
+    where: { id: (await params).id },
     data: {
       ...(status && { status }),
       ...(observacoes !== undefined && { observacoes }),
