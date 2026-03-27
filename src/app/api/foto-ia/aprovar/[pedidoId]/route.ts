@@ -6,9 +6,9 @@ import jwt from 'jsonwebtoken'
 // POST /api/foto-ia/aprovar/[pedidoId]?token=X — aprovação/rejeição pelo cliente (sem auth)
 export async function POST(
   req: NextRequest,
-  { params }: { params: { pedidoId: string } },
+  { params }: { params: Promise<{ pedidoId: string }> },
 ) {
-  const { pedidoId } = params
+  const { pedidoId } = await params
   const token = req.nextUrl.searchParams.get('token')
 
   if (!token) return NextResponse.json({ error: 'Token obrigatório' }, { status: 401 })
