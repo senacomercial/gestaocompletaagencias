@@ -3,12 +3,13 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { updateProjetoSchema } from '@/lib/validators/projeto'
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const session = await requireAuth()
   const organizacaoId = session.user.organizacaoId
 
   const projeto = await prisma.projeto.findFirst({
-    where: { id: params.id, organizacaoId },
+    where: { id, organizacaoId },
     include: {
       lead: { select: { id: true, nome: true, empresa: true, telefone: true } },
       contrato: {
@@ -45,7 +46,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   })
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const session = await requireAuth()
   const organizacaoId = session.user.organizacaoId
 
@@ -55,7 +57,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const parsed = updateProjetoSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
 
-  const updated = await prisma.projeto.updateMany({ where: { id: params.id, organizacaoId }, data: parsed.data })
+  const updated = await prisma.projeto.updateMany({ where: { id, organizacaoId }, data: parsed.data })
   if (updated.count === 0) return NextResponse.json({ error: 'Projeto não encontrado' }, { status: 404 })
   return NextResponse.json({ success: true })
 }

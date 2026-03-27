@@ -11,12 +11,13 @@ const updateAgenteSchema = z.object({
   descricao: z.string().optional(),
 })
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const session = await requireAuth()
   const organizacaoId = session.user.organizacaoId
 
   const agente = await prisma.agente.findFirst({
-    where: { id: params.id, organizacaoId },
+    where: { id, organizacaoId },
     include: {
       squad: { select: { id: true, nome: true } },
       execucoes: {
@@ -30,7 +31,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json(agente)
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const session = await requireAuth()
   const organizacaoId = session.user.organizacaoId
 
@@ -42,7 +44,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
   const { configuracao, ...rest } = parsed.data
   const updated = await prisma.agente.updateMany({
-    where: { id: params.id, organizacaoId },
+    where: { id, organizacaoId },
     data: {
       ...rest,
       ...(configuracao !== undefined ? { configuracao: configuracao as Prisma.InputJsonObject } : {}),
