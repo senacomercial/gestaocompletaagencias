@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
   // 4. Processar queue de geração pendente
   const queuePendente = await prisma.geracaoQueue.findMany({
     where: { processado: false },
-    orderBy: [{ prioridade: 'desc' }, { criadoEm: 'asc' }],
+    orderBy: [{ prioridade: 'desc' }],
     take: 5,
     include: { pedido: { select: { id: true, status: true, organizacaoId: true } },
   })
