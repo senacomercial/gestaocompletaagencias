@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   const lancamentos = await prisma.lancamento.findMany({
     where,
-    include: { contrato: { include: { lead: { select: { nome: true, empresa: true } } } } },
+    include: { contrato: { lead: { select: { nome: true, empresa: true } } },
     orderBy: { dataVencimento: 'asc' },
     take: 200,
   })

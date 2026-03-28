@@ -22,7 +22,7 @@ export async function GET(
       const decoded = jwt.verify(token, secret) as { pedidoId: string }
       const img = await prisma.imagemFotoIA.findUnique({
         where: { id },
-        include: { pedido: { select: { organizacaoId: true, id: true } } },
+        include: { pedido: { select: { id: true, organizacaoId: true } },
       })
       if (img?.pedido.id === decoded.pedidoId) {
         organizacaoId = img.pedido.organizacaoId
@@ -38,7 +38,7 @@ export async function GET(
 
   const imagem = await prisma.imagemFotoIA.findUnique({
     where: { id },
-    include: { pedido: { select: { organizacaoId: true } } },
+    include: { pedido: { select: { id: true, organizacaoId: true } },
   })
 
   if (!imagem || imagem.pedido.organizacaoId !== organizacaoId) {

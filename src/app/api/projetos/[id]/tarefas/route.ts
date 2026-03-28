@@ -53,7 +53,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{id: 
       projetoId: id,
       organizacaoId,
     },
-    include: { responsavel: { select: { id: true, nome: true } } },
+    include: { responsavel: { select: { id: true, nome: true } },
   })
   return NextResponse.json(tarefa, { status: 201 })
 }
