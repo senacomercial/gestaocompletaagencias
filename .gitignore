@@ -40,3 +40,25 @@ prisma/migrations/
 
 # Sentry
 .sentryclirc
+
+
+# Build artifacts & large files
+.netlify/
+.next/
+dist/
+*.log
+
+# Database files
+prisma/dev.db*
+*.db-journal
+postgres-installer.exe
+postgres-*.exe
+prisma/*.db
+
+# Claude & AIOS
+.claude/
+.aios-core/local/
+.aios/install-log.txt
+
+# Worktrees & clones
+.clone/
