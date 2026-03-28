@@ -11,7 +11,6 @@ import { Loader2, Kanban, FolderKanban, Bot, TrendingUp } from 'lucide-react'
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
   senha: z.string().min(1, 'Senha obrigatória'),
-  organizacaoSlug: z.string().optional(),
 })
 
 type LoginForm = z.infer<typeof loginSchema>

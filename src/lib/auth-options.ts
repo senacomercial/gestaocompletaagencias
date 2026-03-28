@@ -28,14 +28,11 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Email e senha são obrigatórios')
         }
 
-        // Busca usuário com organização
+        // Busca usuário (sem exigir organização para login simples)
         const usuario = await prisma.usuario.findFirst({
           where: {
             email: credentials.email,
             ativo: true,
-            organizacao: credentials.organizacaoSlug
-              ? { slug: credentials.organizacaoSlug }
-              : undefined,
           },
           include: {
             organizacao: true,
