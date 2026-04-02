@@ -684,3 +684,17 @@ model GeracaoQueue {
   @@index([prioridade])
   @@map("geracao_queue")
 }
+
+// =============================================================================
+// BAILEYS AUTH STATE — Persistência da sessão WhatsApp no banco
+// =============================================================================
+
+model BaileysAuthState {
+  id            String   @id
+  organizacaoId String
+  data          Json
+  updatedAt     DateTime @updatedAt
+
+  @@index([organizacaoId])
+  @@map("baileys_auth_state")
+}

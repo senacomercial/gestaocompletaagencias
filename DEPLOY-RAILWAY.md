@@ -1,187 +1,144 @@
-# 🚀 DEPLOY RAILWAY — PASSO A PASSO DETALHADO
+# Deploy Railway — Socket Server + Cron
 
-O Socket Server foi separado do Next.js para evitar vulnerabilidades!
+## Arquitetura de Deploy
 
----
+```
+┌─────────────────────────────────┐      ┌──────────────────────────────┐
+│   Netlify (Next.js App)         │      │   Railway (Socket Server)    │
+│   - Frontend React              │ ←──→ │   - Socket.io WebSocket      │
+│   - API Routes (/api/*)         │      │   - WhatsApp (Baileys)       │
+│   - NextAuth                    │      │   - Cron Jobs (interno)      │
+└────────────┬────────────────────┘      └────────────┬─────────────────┘
+             │                                        │
+             └────────────┬───────────────────────────┘
+                          ▼
+              ┌───────────────────────┐
+              │  PostgreSQL (Supabase) │
+              │  + Baileys Auth State  │
+              └───────────────────────┘
+```
 
-## 📋 ARQUIVOS CRIADOS
+## Pré-requisitos
 
-| Arquivo | Localização | Descrição |
-|---------|-------------|-----------|
-| \`server/Dockerfile\` | \`server/\` | Dockerfile específico para Socket Server |
-| \`server/package.json\` | \`server/\` | Dependências apenas do Socket Server (SEM Next.js) |
-| \`server/Procfile\` | \`server/\` | Comando de start |
-| \`.dockerignore\` | raiz | Ignora arquivos do Next.js |
-| \`.railwayignore\` | raiz | Ignora Dockerfile do Next.js |
-
----
-
-## ⚠️ ANTES DE COMEÇAR
-
-**FAÇA COMMIT E PUSH:**
-
-\`\`\`bash
-git add server/Dockerfile server/package.json server/Procfile .dockerignore .railwayignore
-git commit -m "feat: Socket Server separado com Dockerfile dedicado"
-git push
-\`\`\`
-
----
-
-## PASSO 1: Configurar Contexto do Build no Railway
-
-**IMPORTANTE:** O Railway precisa saber que o Dockerfile está na pasta \`server/\`.
-
-### Opção 1: Usar Root Directory no Railway
-
-1. Acesse: https://railway.app
-2. Clique em **"+ New Project"**
-3. Escolha **"Deploy from GitHub repo"**
-4. Conecte o repositório: \`gestaocompletaagencias\`
-5. No campo **"Root Directory"** ou **"Working Directory"**, digite: \`server\`
-6. Clique em **"Deploy"**
-
-### Opção 2: Se Root Directory não aparecer
-
-Se não houver opção de Root Directory:
-
-1. Crie o projeto normalmente
-2. Vá em **Settings** → **General**
-3. Configure o **Root Directory** como \`server\`
-4. Clique em **Redeploy**
+1. Conta no [Railway](https://railway.app)
+2. Repositório no GitHub conectado
+3. Banco PostgreSQL (Supabase) acessível
+4. `RAILWAY_TOKEN` gerado em Railway > Settings > Tokens
 
 ---
 
-## PASSO 2: Adicionar Variáveis de Ambiente
+## Passo 1: Criar Projeto no Railway
 
-No painel do projeto Railway:
-
-1. Clique na aba **"Variables"**
-2. Clique em **"+ New Variable"**
-3. Adicione UMA POR UMA vez:
-
-### Variáveis obrigatórias:
-
-\`\`\`
-DATABASE_URL=postgresql://postgres:EbjczPcJmuMPTTFo@db.sannahsoowuzllgmurzt.supabase.co:5432/postgres
-\`\`\`
+1. Acesse https://railway.app → **"+ New Project"**
+2. Escolha **"Deploy from GitHub repo"**
+3. Conecte o repositório `gestaocompletaagencias`
+4. **Root Directory**: `server`
+5. Deploy
 
 ---
 
-\`\`\`
-SUPABASE_URL=https://sannahsoowuzllgmurzt.supabase.co
-\`\`\`
+## Passo 2: Variáveis de Ambiente (Railway)
+
+No painel do projeto → **Variables**, adicione:
+
+### Obrigatórias
+
+| Variável | Valor | Descrição |
+|----------|-------|-----------|
+| `DATABASE_URL` | `postgresql://...` | String de conexão PostgreSQL |
+| `NEXT_PUBLIC_APP_URL` | URL do Netlify | Para callbacks da API |
+| `AIOS_API_KEY` | sua-chave | Token interno para API routes |
+| `CRON_SECRET` | `openssl rand -hex 32` | Autenticação do cron interno |
+| `NODE_ENV` | `production` | |
+
+### Opcionais
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `CRON_INTERVAL_MS` | `3600000` | Intervalo do cron (1h) |
+
+> **Nota:** `PORT` é atribuído automaticamente pelo Railway — não defina manualmente.
 
 ---
 
-\`\`\`
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhbm5haHNvb3d1emxsZ211cnp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1OTAyNDYsImV4cCI6MjA4ODE2NjI0Nn0.1hXZr5ba0tLf2W1pj7PdRTgXkKCkwoojM8QbB43N6aw
-\`\`\`
+## Passo 3: Verificar Deploy
+
+1. Aguarde build + deploy (1-2 min)
+2. Acesse `https://<sua-url>.up.railway.app/health`
+3. Deve retornar: `{"status":"ok","timestamp":"..."}`
 
 ---
 
-\`\`\`
-NODE_ENV=production
-\`\`\`
+## Passo 4: Atualizar Netlify
+
+1. Acesse Netlify → Environment Variables
+2. Atualize `NEXT_PUBLIC_SOCKET_URL` com a URL do Railway
+3. Trigger redeploy
 
 ---
 
-\`\`\`
-SOCKET_PORT=3001
-\`\`\`
+## Passo 5: Migrar Banco (se necessário)
+
+```bash
+# Aplicar migração da tabela baileys_auth_state
+npx prisma migrate deploy
+```
+
+> A tabela também é criada automaticamente pelo socket-server na primeira conexão WhatsApp.
 
 ---
 
-\`\`\`
-NEXT_PUBLIC_APP_URL=https://preeminent-pastelito-752715.netlify.app
-\`\`\`
+## Como Funciona
+
+### WhatsApp (Baileys)
+- Sessões persistem no PostgreSQL (tabela `baileys_auth_state`)
+- Sem perda de sessão entre redeploys
+- Auto-reconecta ao iniciar se há sessão salva no banco
+- Fallback para filesystem em dev local (sem `DATABASE_URL`)
+
+### Cron Jobs
+- O socket-server executa `GET /api/cron/fotoia` a cada hora
+- Autenticado via `CRON_SECRET`
+- Primeira execução 60s após startup
+- Configurável via `CRON_INTERVAL_MS`
+
+### Storage de Imagens (FotoIA)
+- **Produção**: use `STORAGE_PROVIDER=r2` com Cloudflare R2
+- **Dev**: `STORAGE_PROVIDER=local` (filesystem)
+- SDK `@aws-sdk/client-s3` já instalado
 
 ---
 
-## PASSO 3: Iniciar Deploy
+## GitHub Actions (Auto-deploy)
 
-1. Clique em **"Deploy"**
-2. **Aguarde 1-2 minutos** (agora é mais rápido porque não instala o Next.js!)
+O workflow `.github/workflows/railway-deploy.yml` faz deploy automático ao push em `main` (somente se arquivos em `server/` mudarem).
 
----
-
-## PASSO 4: Verificar Deploy
-
-Aguarde ver:
-- ✅ \`Build succeeded\`
-- ✅ \`Container is running\`
+**Requisito:** Adicione `RAILWAY_TOKEN` nos secrets do repositório GitHub.
 
 ---
 
-## PASSO 5: Obter a URL
+## Troubleshooting
 
-1. Clique em **"Settings"**
-2. Copie a **Public URL** (ex: \`https://xxx.up.railway.app\`)
+### Container crasha ao iniciar
+- Verifique logs em Railway → Deployments → View logs
+- Cause comum: `DATABASE_URL` ausente ou incorreta
 
----
+### WhatsApp não reconecta após redeploy
+- Verifique se `DATABASE_URL` está configurada no Railway
+- O auto-reconnect busca sessões da tabela `baileys_auth_state`
 
-## PASSO 6: Testar
+### Cron não executa
+- Verifique se `CRON_SECRET` e `NEXT_PUBLIC_APP_URL` estão configurados
+- Logs mostram `[Cron] FotoIA executado` a cada hora
 
-Abra no navegador:
-\`\`\`
-https://sua-url-railway.up.railway.app/health
-\`\`\`
-
-Deve aparecer:
-\`\`\`json
-{"status":"ok","timestamp":"..."}
-\`\`\`
-
----
-
-## PASSO 7: Atualizar Netlify
-
-1. Acesse: https://app.netlify.com/projects/preeminent-pastelito-752715/settings
-2. Vá em **"Environment variables"**
-3. Edite \`NEXT_PUBLIC_SOCKET_URL\` com a URL do Railway
-4. Clique em **"Trigger deploy"**
+### Imagens perdidas após redeploy
+- Use `STORAGE_PROVIDER=r2` em produção
+- Storage local é efêmero no Railway
 
 ---
 
-## ✅ CONCLUSÃO
+## Links
 
-| Sistema | URL | Status |
-|---------|-----|--------|
-| Next.js | https://preeminent-pastelito-752715.netlify.app | ✅ ONLINE |
-| Socket Server | (sua URL Railway) | ⏳ AGUARDANDO |
-| Database | Supabase | ✅ OK |
-
----
-
-## 🧪 TESTE FINAL
-
-No console do navegador (F12):
-
-\`\`\`javascript
-const socket = io('https://sua-url-railway.up.railway.app');
-socket.on('connect', () => console.log('✅ Socket conectado!'));
-\`\`\`
-
----
-
-## 🔧 PROBLEMAS E SOLUÇÕES
-
-### Build ainda falha?
-1. Verifique se você fez \`git push\`
-2. Confirme que o **Root Directory** está configurado como \`server\`
-3. Veja o log de erro em **"Deploy"** → **View logs**
-
-### Variáveis não funcionam?
-1. Após adicionar as variáveis, clique em **"Redeploy"**
-2. Verifique se não há espaços extras nos nomes das variáveis
-
-### Container crasha?
-1. Veja o log em **"Logs"**
-2. Geralmente é falta de variável de ambiente
-
----
-
-**Links úteis:**
 - Railway: https://railway.app
 - Netlify: https://app.netlify.com/projects/preeminent-pastelito-752715
-- Docs Railway: https://docs.railway.app
+- Supabase: https://supabase.com/dashboard

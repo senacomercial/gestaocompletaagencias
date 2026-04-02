@@ -19,17 +19,19 @@ const { Boom } = require('@hapi/boom')
 const pino = require('pino')
 const path = require('path')
 const fs = require('fs')
+const { usePostgresAuthState } = require('./baileys-db-auth')
 
 // =============================================================================
 // Config
 // =============================================================================
 
-const PORT = parseInt(process.env.SOCKET_PORT || '3001', 10)
+const PORT = parseInt(process.env.PORT || process.env.SOCKET_PORT || '3001', 10)
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 const AUTH_DIR = path.join(process.cwd(), '.baileys-auth')
 const MAX_RECONNECT_ATTEMPTS = 3
+const USE_DB_AUTH = !!process.env.DATABASE_URL // Usa banco se DATABASE_URL disponível
 
-if (!fs.existsSync(AUTH_DIR)) {
+if (!USE_DB_AUTH && !fs.existsSync(AUTH_DIR)) {
   fs.mkdirSync(AUTH_DIR, { recursive: true })
 }
 
@@ -188,6 +190,9 @@ const waStates = new Map() // 'qr' | 'connected' | 'disconnected'
 /** @type {Map<string, string>} telefone conectado por org */
 const connectedPhones = new Map()
 
+/** @type {Map<string, { clearAll: () => Promise<void>, close: () => Promise<void> }>} auth handles por org */
+const authHandles = new Map()
+
 // Status codes que PODEM ser reconectados automaticamente (sessão provavelmente válida)
 const RECONECTABLE_CODES = new Set([
   DisconnectReason.connectionLost,   // 408
@@ -217,12 +222,24 @@ function clearOrgState(organizacaoId) {
  * @param {string} organizacaoId
  */
 async function connectWhatsApp(organizacaoId) {
-  const authPath = path.join(AUTH_DIR, organizacaoId)
-  if (!fs.existsSync(authPath)) {
-    fs.mkdirSync(authPath, { recursive: true })
-  }
+  let state, saveCreds, authHandle
 
-  const { state, saveCreds } = await useMultiFileAuthState(authPath)
+  if (USE_DB_AUTH) {
+    // Persistência via PostgreSQL (Railway-safe)
+    authHandle = await usePostgresAuthState(organizacaoId)
+    state = authHandle.state
+    saveCreds = authHandle.saveCreds
+    authHandles.set(organizacaoId, authHandle)
+  } else {
+    // Fallback: filesystem (desenvolvimento local)
+    const authPath = path.join(AUTH_DIR, organizacaoId)
+    if (!fs.existsSync(authPath)) {
+      fs.mkdirSync(authPath, { recursive: true })
+    }
+    const fileAuth = await useMultiFileAuthState(authPath)
+    state = fileAuth.state
+    saveCreds = fileAuth.saveCreds
+  }
 
   // Busca versão mais recente com fallback (evita travar se não tiver internet/timeout)
   let version
@@ -293,6 +310,14 @@ async function connectWhatsApp(organizacaoId) {
             statusCode === DisconnectReason.badSession ||
             statusCode === 405 || // protocolo rejeitado
             statusCode === 403) { // banido
+          // Limpar do banco
+          const handle = authHandles.get(organizacaoId)
+          if (handle) {
+            try { await handle.clearAll() } catch (_) {}
+            try { await handle.close() } catch (_) {}
+            authHandles.delete(organizacaoId)
+          }
+          // Limpar do filesystem
           const authPath = path.join(AUTH_DIR, organizacaoId)
           if (fs.existsSync(authPath)) {
             fs.rmSync(authPath, { recursive: true, force: true })
@@ -469,9 +494,18 @@ io.on('connection', (socket) => {
     if (waConnections.has(organizacaoId)) {
       try { waConnections.get(organizacaoId)?.end() } catch (_) {}
     }
+
+    // Limpar credenciais do banco (se usando DB auth)
+    const handle = authHandles.get(organizacaoId)
+    if (handle) {
+      try { await handle.clearAll() } catch (_) {}
+      try { await handle.close() } catch (_) {}
+      authHandles.delete(organizacaoId)
+    }
+
     clearOrgState(organizacaoId)
 
-    // Apagar credenciais salvas
+    // Apagar credenciais locais (fallback)
     const authPath = path.join(AUTH_DIR, organizacaoId)
     if (fs.existsSync(authPath)) {
       fs.rmSync(authPath, { recursive: true, force: true })
@@ -527,8 +561,30 @@ httpServer.listen(PORT, () => {
   logger.info(`Socket.io server rodando na porta ${PORT}`)
   logger.info(`CORS habilitado para: ${APP_URL}`)
 
-  // Auto-reconectar orgs que têm credenciais salvas (retoma sessão sem novo QR)
-  if (fs.existsSync(AUTH_DIR)) {
+  // Auto-reconectar orgs que têm credenciais salvas
+  if (USE_DB_AUTH) {
+    // Buscar orgs com sessões salvas no banco
+    const { Client } = require('pg')
+    const pgClient = new Client({ connectionString: process.env.DATABASE_URL })
+    pgClient.connect()
+      .then(() => pgClient.query(`SELECT DISTINCT "organizacaoId" FROM baileys_auth_state`))
+      .then(result => {
+        const orgs = result.rows.map(r => r.organizacaoId)
+        if (orgs.length > 0) {
+          logger.info({ orgs }, `Auto-reconectando ${orgs.length} sessão(ões) WhatsApp do banco...`)
+          for (const orgId of orgs) {
+            connectWhatsApp(orgId).catch(err =>
+              logger.warn({ orgId, err: err.message }, 'Falha no auto-reconect')
+            )
+          }
+        }
+        return pgClient.end()
+      })
+      .catch(err => {
+        logger.warn({ err: err.message }, 'Não foi possível buscar sessões do banco')
+        pgClient.end().catch(() => {})
+      })
+  } else if (fs.existsSync(AUTH_DIR)) {
     const orgs = fs.readdirSync(AUTH_DIR).filter(d =>
       fs.statSync(path.join(AUTH_DIR, d)).isDirectory()
     )
@@ -543,14 +599,61 @@ httpServer.listen(PORT, () => {
   }
 })
 
+// =============================================================================
+// Cron interno — substitui Vercel Cron no Railway
+// =============================================================================
+
+const CRON_INTERVAL = parseInt(process.env.CRON_INTERVAL_MS || '3600000', 10) // 1h padrão
+let cronTimer = null
+
+function startCronJobs() {
+  if (!process.env.CRON_SECRET) {
+    logger.warn('CRON_SECRET não definido — cron jobs desabilitados')
+    return
+  }
+
+  async function runCron() {
+    try {
+      const res = await fetch(`${APP_URL}/api/cron/fotoia`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${process.env.CRON_SECRET}` },
+      })
+      const data = await res.json()
+      logger.info({ status: res.status, ...data }, '[Cron] FotoIA executado')
+    } catch (err) {
+      logger.error({ err: err.message }, '[Cron] Erro ao executar FotoIA cron')
+    }
+  }
+
+  // Primeira execução após 60s (dar tempo do app iniciar)
+  setTimeout(() => {
+    runCron()
+    cronTimer = setInterval(runCron, CRON_INTERVAL)
+    logger.info({ intervalMs: CRON_INTERVAL }, '[Cron] Jobs agendados')
+  }, 60000)
+}
+
+startCronJobs()
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM recebido, desligando...')
+
+  // Parar cron
+  if (cronTimer) clearInterval(cronTimer)
+
+  // Fechar conexões WhatsApp
   for (const [orgId, sock] of waConnections) {
     try {
       sock.end()
       logger.info({ orgId }, 'WhatsApp desconectado')
     } catch (_) {}
   }
+
+  // Fechar conexões de auth DB
+  for (const [, handle] of authHandles) {
+    try { await handle.close() } catch (_) {}
+  }
+
   httpServer.close(() => process.exit(0))
 })

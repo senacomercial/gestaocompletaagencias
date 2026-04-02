@@ -1,8 +1,10 @@
-name: Deploy to Railway
+name: Deploy Socket Server to Railway
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'server/**'
 
 jobs:
   deploy:
@@ -11,36 +13,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
       - name: Deploy to Railway
         env:
-          RAILWAY_TOKEN: ${ secrets.RAILWAY_TOKEN }
-        run: npx @railway/cli up --service
-
-      - name: Update Socket URL in Netlify
-        run: |
-          RAILWAY_URL=$(npx @railway/cli domain --service)
-          if [ -n "$RAILWAY_URL" ]; then
-            echo "Socket URL: $RAILWAY_URL"
-            echo "::set-output name=socket_url::$RAILWAY_URL"
-          else
-            echo "❌ URL não encontrada"
-            exit 1
-        id: get_socket_url
-
-      - name: Trigger Netlify Deploy
-        needs: get_socket_url
-        uses: actions/checkout@v4
-        with:
-          repository: senacomercial/netlify-deployments
-          token: ${ secrets.NETLIFY_TOKEN }
-        with:
-          event: deploy_created
-          custom_variables: NEXT_PUBLIC_SOCKET_URL=${{ steps.get_socket_url.outputs.socket_url }
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service socket-server
