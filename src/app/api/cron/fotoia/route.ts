@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
     where: { processado: false },
     orderBy: [{ prioridade: 'desc' }],
     take: 5,
-    include: { pedido: { select: { id: true, status: true, organizacaoId: true } },
+    include: { pedido: { select: { id: true, status: true, organizacaoId: true } } },
   })
 
   for (const item of queuePendente) {

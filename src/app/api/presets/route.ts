@@ -9,7 +9,7 @@ export async function GET() {
 
   const presets = await prisma.presetServico.findMany({
     where: { organizacaoId },
-    include: { tarefas: { orderBy: { ordemPadrao: .asc. } },
+    include: { tarefas: { orderBy: { ordemPadrao: 'asc' } } },
     orderBy: { createdAt: 'asc' },
   })
   return NextResponse.json(presets)

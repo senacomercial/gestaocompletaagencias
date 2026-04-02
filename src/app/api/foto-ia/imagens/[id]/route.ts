@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getImageBuffer } from '@/lib/fotoia/storage/storage-service'
+import { getImageBuffer, getImageBufferFromR2 } from '@/lib/fotoia/storage/storage-service'
 import jwt from 'jsonwebtoken'
 
 // GET /api/foto-ia/imagens/[id] — serve imagem com autenticação
@@ -22,7 +22,7 @@ export async function GET(
       const decoded = jwt.verify(token, secret) as { pedidoId: string }
       const img = await prisma.imagemFotoIA.findUnique({
         where: { id },
-        include: { pedido: { select: { id: true, organizacaoId: true } },
+        include: { pedido: { select: { id: true, organizacaoId: true } } },
       })
       if (img?.pedido.id === decoded.pedidoId) {
         organizacaoId = img.pedido.organizacaoId
@@ -38,15 +38,18 @@ export async function GET(
 
   const imagem = await prisma.imagemFotoIA.findUnique({
     where: { id },
-    include: { pedido: { select: { id: true, organizacaoId: true } },
+    include: { pedido: { select: { id: true, organizacaoId: true } } },
   })
 
   if (!imagem || imagem.pedido.organizacaoId !== organizacaoId) {
     return NextResponse.json({ error: 'Imagem não encontrada' }, { status: 404 })
   }
 
-  // Servir do storage local
-  const buffer = getImageBuffer(imagem.url)
+  // Servir do storage (local ou R2)
+  let buffer = getImageBuffer(imagem.url)
+  if (!buffer && process.env.STORAGE_PROVIDER === 'r2') {
+    buffer = await getImageBufferFromR2(imagem.url)
+  }
   if (!buffer) {
     // Fallback: redirecionar para URL pública se disponível
     if (imagem.urlPublica) {

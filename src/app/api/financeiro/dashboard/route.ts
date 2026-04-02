@@ -40,13 +40,13 @@ export async function GET() {
   const [proximosVencimentos, inadimplentes, topClientes] = await Promise.all([
     prisma.lancamento.findMany({
       where: { organizacaoId, status: 'PENDENTE', dataVencimento: { gte: agora, lte: new Date(agora.getTime() + 15 * 86400000) } },
-      include: { contrato: { lead: { select: { nome: true, empresa: true } } },
+      include: { contrato: { include: { lead: { select: { nome: true, empresa: true } } } } },
       orderBy: { dataVencimento: 'asc' },
       take: 10,
     }),
     prisma.lancamento.findMany({
       where: { organizacaoId, status: 'ATRASADO' },
-      include: { contrato: { lead: { select: { nome: true, empresa: true } } },
+      include: { contrato: { include: { lead: { select: { nome: true, empresa: true } } } } },
       orderBy: { dataVencimento: 'asc' },
       take: 10,
     }),

@@ -25,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{id: 
       tarefaId: (await params).id,
       autorId: session.user.id,
     },
-    include: { autor: { select: { id: true, nome: true } },
+    include: { autor: { select: { id: true, nome: true } } },
   })
   return NextResponse.json(detalhamento, { status: 201 })
 }
