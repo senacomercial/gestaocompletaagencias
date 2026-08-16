@@ -1,0 +1,28 @@
+[build]
+command = "npm run build"
+publish = ".next"
+
+[build.environment]
+NODE_VERSION = "18.17.0"
+NODE_ENV = "production"
+NEXT_PUBLIC_APP_NAME = "Gestão de Agências"
+
+[[redirects]]
+from = "/api/*"
+to = "/.netlify/functions/:splat"
+status = 200
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200
+
+[[headers]]
+for = "/_next/static/*"
+[headers.values]
+Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+for = "/*.html"
+[headers.values]
+Cache-Control = "public, max-age=0, must-revalidate"
