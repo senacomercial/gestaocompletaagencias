@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -217,6 +218,13 @@ export default function LoginPage() {
           </form>
 
           <p className="text-center text-xs text-muted-foreground mt-8">
+            Não tem uma conta?{' '}
+            <Link href="/signup" className="text-gold-400 hover:text-gold-300 font-semibold transition-colors">
+              Cadastre-se aqui
+            </Link>
+          </p>
+
+          <p className="text-center text-xs text-muted-foreground mt-3">
             Sistema de uso exclusivo · {new Date().getFullYear()} Gestão de Agências
           </p>
         </div>

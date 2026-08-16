@@ -70,7 +70,6 @@ export async function GET() {
       where: { organizacaoId: orgId },
       orderBy: { criadoEm: 'desc' },
       take: 8,
-      include: { lead: { select: { nome: true, empresa: true } } },
       select: {
         id: true, status: true, tipoFoto: true, valorCobrado: true, criadoEm: true,
         lead: { select: { nome: true, empresa: true } },

@@ -28,7 +28,7 @@ export async function verificarPedidosTravados(organizacaoId: string): Promise<A
     where: {
       organizacaoId,
       status: 'EM_PRODUCAO',
-      updatedAt: { lt: new Date(agora.getTime() - 30 * 60 * 1000) },
+      atualizadoEm: { lt: new Date(agora.getTime() - 30 * 60 * 1000) },
     },
     select: { id: true, lead: { select: { nome: true } } },
     take: 10,
@@ -49,7 +49,7 @@ export async function verificarPedidosTravados(organizacaoId: string): Promise<A
     where: {
       organizacaoId,
       status: 'AGUARDANDO_APROVACAO',
-      updatedAt: { lt: new Date(agora.getTime() - 2 * 60 * 60 * 1000) },
+      atualizadoEm: { lt: new Date(agora.getTime() - 2 * 60 * 60 * 1000) },
     },
     select: { id: true, lead: { select: { nome: true } } },
     take: 10,
@@ -70,7 +70,7 @@ export async function verificarPedidosTravados(organizacaoId: string): Promise<A
     where: {
       organizacaoId,
       status: 'AGUARDANDO_PAGAMENTO',
-      updatedAt: { lt: new Date(agora.getTime() - 24 * 60 * 60 * 1000) },
+      atualizadoEm: { lt: new Date(agora.getTime() - 24 * 60 * 60 * 1000) },
     },
     select: { id: true, lead: { select: { nome: true } } },
     take: 10,

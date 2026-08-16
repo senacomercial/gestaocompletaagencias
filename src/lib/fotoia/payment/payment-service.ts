@@ -138,7 +138,6 @@ class MercadoPagoGateway implements IPaymentGateway {
   }
 
   async createCharge(input: ChargeInput): Promise<ChargeResult> {
-    const n = Math.min(input.numOutputs ?? 1, 4) // DALL-E max 4 per request
     const res = await fetch('https://api.mercadopago.com/v1/payments', {
       method: 'POST',
       headers: {
