@@ -217,10 +217,20 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-center text-xs text-muted-foreground mt-8">
-            Não tem uma conta?{' '}
-            <Link href="/signup" className="text-gold-400 hover:text-gold-300 font-semibold transition-colors">
-              Cadastre-se aqui
+          {/* Botão de Criar Conta */}
+          <Link href="/signup" className="block w-full mt-4">
+            <button
+              type="button"
+              className="btn-secondary w-full flex items-center justify-center gap-2 h-11 text-sm font-semibold hover:bg-gold-400/10 transition-colors"
+            >
+              + Criar nova conta
+            </button>
+          </Link>
+
+          <p className="text-center text-xs text-muted-foreground mt-6">
+            Já tem uma conta?{' '}
+            <Link href="/login" className="text-gold-400 hover:text-gold-300 font-semibold transition-colors">
+              Volte ao login
             </Link>
           </p>
 
