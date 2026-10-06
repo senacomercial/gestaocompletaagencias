@@ -2,30 +2,30 @@
  * Teste de fluxo completo FotoIA — Story 8.2 AC: 8
  *
  * Mocka: WhatsApp (não envia), Gateway PIX (simula confirmação),
- *        Replicate (retorna imagem de teste), Prisma (in-memory via jest.mock)
+ *        Replicate (retorna imagem de teste), Prisma (in-memory via vi.mock)
  *
- * Execução: npx jest src/lib/fotoia/__tests__/fluxo-completo.test.ts
+ * Execução: npx vitest run src/lib/fotoia/__tests__/fluxo-completo.test.ts
  */
 
-import { jest } from '@jest/globals'
+import { vi } from 'vitest'
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
 // Mock WhatsApp sender
-jest.mock('@/lib/fotoia/whatsapp/wa-sender', () => ({
-  enviarTexto:   jest.fn().mockResolvedValue(undefined),
-  enviarImagens: jest.fn().mockResolvedValue(undefined),
+vi.mock('@/lib/fotoia/whatsapp/wa-sender', () => ({
+  enviarTexto:   vi.fn().mockResolvedValue(undefined),
+  enviarImagens: vi.fn().mockResolvedValue(undefined),
 }))
 
 // Mock Replicate (fetch)
-const mockFetch = jest.fn()
+const mockFetch = vi.fn()
 global.fetch = mockFetch
 
 // Mock Anthropic (quality check)
-jest.mock('@anthropic-ai/sdk', () => ({
-  default: jest.fn().mockImplementation(() => ({
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: vi.fn().mockImplementation(() => ({
     messages: {
-      create: jest.fn().mockResolvedValue({
+      create: vi.fn().mockResolvedValue({
         content: [{ type: 'text', text: 'SIM' }],
       }),
     },
@@ -33,44 +33,45 @@ jest.mock('@anthropic-ai/sdk', () => ({
 }))
 
 // Mock PIX config
-jest.mock('@/lib/fotoia/payment/pix-manual', () => ({
+vi.mock('@/lib/fotoia/payment/pix-manual', () => ({
   getPixConfig: () => ({
     chave: 'pix@teste.com',
     tipo: 'email',
     nome: 'Agência Teste',
   }),
-  validarComprovanteComIA: jest.fn().mockResolvedValue({
+  validarComprovanteComIA: vi.fn().mockResolvedValue({
     valido: true,
     motivo: 'Comprovante válido (mock)',
   }),
 }))
 
 // Mock Prisma
+const { PEDIDO_ID, ORG_ID, LEAD_ID, s, mockPrisma } = vi.hoisted(() => {
 const PEDIDO_ID = 'pedido-teste-001'
 const ORG_ID    = 'org-teste-001'
 const LEAD_ID   = 'lead-teste-001'
-
-let pedidoState: Record<string, unknown> = {}
-let execucoes: unknown[] = []
-let imagens: unknown[] = []
-
+const s = {
+  pedidoState: {} as Record<string, unknown>,
+  execucoes: [] as unknown[],
+  imagens: [] as unknown[],
+}
 const mockPrisma = {
   pedidoFotoIA: {
-    findUnique: jest.fn().mockImplementation(({ where }: { where: { id: string } }) => {
+    findUnique: vi.fn().mockImplementation(({ where }: { where: { id: string } }) => {
       if (where.id !== PEDIDO_ID) return null
       return Promise.resolve({
         id: PEDIDO_ID,
         organizacaoId: ORG_ID,
-        status: pedidoState.status ?? 'NOVO_LEAD',
-        pacote: pedidoState.pacote ?? null,
-        valorCobrado: pedidoState.valorCobrado ?? null,
-        revisoesMaximas: pedidoState.revisoesMaximas ?? 4,
-        rodadasRevisao: pedidoState.rodadasRevisao ?? 0,
-        cobrancaId: pedidoState.cobrancaId ?? null,
-        linkPagamento: pedidoState.linkPagamento ?? null,
-        predictionId: pedidoState.predictionId ?? null,
-        temaFoto: pedidoState.temaFoto ?? null,
-        fotoClienteUrl: pedidoState.fotoClienteUrl ?? null,
+        status: s.pedidoState.status ?? 'NOVO_LEAD',
+        pacote: s.pedidoState.pacote ?? null,
+        valorCobrado: s.pedidoState.valorCobrado ?? null,
+        revisoesMaximas: s.pedidoState.revisoesMaximas ?? 4,
+        rodadasRevisao: s.pedidoState.rodadasRevisao ?? 0,
+        cobrancaId: s.pedidoState.cobrancaId ?? null,
+        linkPagamento: s.pedidoState.linkPagamento ?? null,
+        predictionId: s.pedidoState.predictionId ?? null,
+        temaFoto: s.pedidoState.temaFoto ?? null,
+        fotoClienteUrl: s.pedidoState.fotoClienteUrl ?? null,
         descricao: null,
         observacoes: null,
         lead: {
@@ -79,31 +80,34 @@ const mockPrisma = {
           telefone: '5511999990001',
         },
         organizacao: { id: ORG_ID, nome: 'Agência Teste' },
-        imagens,
-        ...pedidoState,
+        imagens: s.imagens,
+        ...s.pedidoState,
       })
     }),
-    update: jest.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) => {
-      pedidoState = { ...pedidoState, ...data }
-      return Promise.resolve({ id: PEDIDO_ID, ...pedidoState })
+    update: vi.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) => {
+      s.pedidoState = { ...s.pedidoState, ...data }
+      return Promise.resolve({ id: PEDIDO_ID, ...s.pedidoState })
     }),
-    count: jest.fn().mockResolvedValue(0),
+    count: vi.fn().mockResolvedValue(0),
   },
   fotoIAConfig: {
-    findUnique: jest.fn().mockResolvedValue({ maxSimultaneos: 3 }),
+    findUnique: vi.fn().mockResolvedValue({ maxSimultaneos: 3 }),
   },
   execucaoFotoIA: {
-    create: jest.fn().mockImplementation(({ data }: { data: unknown }) => {
-      execucoes.push(data)
+    create: vi.fn().mockImplementation(({ data }: { data: unknown }) => {
+      s.execucoes.push(data)
       return Promise.resolve(data)
     }),
   },
   geracaoQueue: {
-    upsert: jest.fn().mockResolvedValue({}),
+    upsert: vi.fn().mockResolvedValue({}),
   },
 }
 
-jest.mock('@/lib/prisma', () => ({ prisma: mockPrisma }))
+return { PEDIDO_ID, ORG_ID, LEAD_ID, s, mockPrisma }
+})
+
+vi.mock('@/lib/prisma', () => ({ prisma: mockPrisma }))
 
 // ── Importar após mocks ────────────────────────────────────────────────────
 
@@ -117,10 +121,10 @@ import { enviarTexto }                             from '@/lib/fotoia/whatsapp/w
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function resetState(overrides: Record<string, unknown> = {}) {
-  pedidoState = { status: 'NOVO_LEAD', ...overrides }
-  execucoes   = []
-  imagens     = []
-  jest.clearAllMocks()
+  s.pedidoState = { status: 'NOVO_LEAD', ...overrides }
+  s.execucoes   = []
+  s.imagens     = []
+  vi.clearAllMocks()
 
   // Re-mock Replicate fetch
   mockFetch.mockResolvedValue({
@@ -228,11 +232,11 @@ describe('FotoIA — Fluxo Completo (mockado)', () => {
 
   describe('Etapa 5: Entrega e aprovação (Entregador)', () => {
     beforeEach(() => {
-      imagens = [
+      resetState({ status: 'AGUARDANDO_APROVACAO', revisoesMaximas: 4, rodadasRevisao: 0, pacote: 'PROFISSIONAL' })
+      s.imagens = [
         { id: 'img-1', url: 'http://cdn.test/img1.jpg', tipo: 'gerada', aprovada: false, criadoEm: new Date() },
         { id: 'img-2', url: 'http://cdn.test/img2.jpg', tipo: 'gerada', aprovada: false, criadoEm: new Date() },
       ]
-      resetState({ status: 'AGUARDANDO_APROVACAO', revisoesMaximas: 4, rodadasRevisao: 0, pacote: 'PROFISSIONAL' })
     })
 
     it('avaliarQualidadeEEnviar: envia imagens via WA e muda status para AGUARDANDO_APROVACAO', async () => {
@@ -264,13 +268,13 @@ describe('FotoIA — Fluxo Completo (mockado)', () => {
 
     it('qualificarLead registra ao menos 1 execução em ExecucaoFotoIA', async () => {
       await qualificarLead(PEDIDO_ID)
-      expect(execucoes.length).toBeGreaterThanOrEqual(1)
+      expect(s.execucoes.length).toBeGreaterThanOrEqual(1)
     })
 
     it('gerarCobranca registra execução com etapa "gerar-cobranca"', async () => {
       resetState({ status: 'PROPOSTA_ENVIADA', pacote: 'PROFISSIONAL', valorCobrado: 47 })
       await gerarCobranca(PEDIDO_ID)
-      const log = execucoes.find((e: unknown) => (e as { etapa: string }).etapa === 'gerar-cobranca')
+      const log = s.execucoes.find((e: unknown) => (e as { etapa: string }).etapa === 'gerar-cobranca')
       expect(log).toBeDefined()
     })
   })
